@@ -122,23 +122,23 @@ class WindowsPlatform:
         from app.platform.winlib import point_inside
 
         if pick == "first_video":
-            return self._click_window_ratio(window_title or "YouTube", 0.33, 0.42, cancel_event, deadline, "第一个视频")
+            return self._click_window_ratio(window_title or "YouTube", 0.33, 0.42, cancel_event, deadline, "first video")
         alternatives = [part.strip() for part in name.split("|") if part.strip()]
         while time.monotonic() < deadline:
             if _cancelled(cancel_event):
-                raise CancellationError("任务已停止")
+                raise CancellationError("The task was stopped")
             found = _find_named_control(alternatives, window_title)
             if found is not None:
                 x, y, matched = found
                 if not point_inside(x, y, self.virtual_screen()):
-                    return _click_failure("控件中心不在屏幕内", "permission", x, y, matched)
+                    return _click_failure("The control center is outside the screen", "permission", x, y, matched)
                 if window_title:
                     self.focus_window(window_title)
                 self.move_mouse(x, y)
                 self.click(x, y)
                 return {"ok": True, "x": x, "y": y, "name": matched, "error": None, "error_code": None}
             time.sleep(0.4)
-        return _click_failure("没有在窗口里找到可点击的控件", "window_not_ready")
+        return _click_failure("No clickable control was found in the window", "window_not_ready")
 
     def _click_window_ratio(self, window_title: str, x_ratio: float, y_ratio: float, cancel_event, deadline: float, label: str) -> dict:
         from app.platform.winlib import point_inside
@@ -146,7 +146,7 @@ class WindowsPlatform:
         ready = False
         while time.monotonic() < deadline:
             if _cancelled(cancel_event):
-                raise CancellationError("任务已停止")
+                raise CancellationError("The task was stopped")
             point = _window_ratio_point(window_title, x_ratio, y_ratio)
             if point is None:
                 time.sleep(0.4)
@@ -157,12 +157,12 @@ class WindowsPlatform:
                 continue
             x, y = point
             if not point_inside(x, y, self.virtual_screen()):
-                return _click_failure("点击位置不在屏幕内", "permission", x, y, label)
+                return _click_failure("The click point is outside the screen", "permission", x, y, label)
             self.focus_window(window_title)
             self.move_mouse(x, y)
             self.click(x, y)
             return {"ok": True, "x": x, "y": y, "name": label, "error": None, "error_code": None}
-        return _click_failure("没有找到 YouTube 窗口", "window_not_ready")
+        return _click_failure("The YouTube window was not found", "window_not_ready")
 
     def window_titles(self) -> list[str]:
         import win32gui
@@ -383,7 +383,7 @@ class WindowsPlatform:
         flags = 0x01 | 0x02
         ok = ctypes.windll.user32.SystemParametersInfoW(20, 0, str(destination), flags)
         if not ok:
-            raise OSError("系统没有接受壁纸更改")
+            raise OSError("The system did not accept the wallpaper change")
         return str(destination)
 
     def get_wallpaper(self) -> str:
@@ -411,7 +411,7 @@ class WindowsPlatform:
         import winreg
 
         if mode not in {"light", "dark"}:
-            raise ValueError("外观只能是 light 或 dark")
+            raise ValueError("Appearance can only be light or dark")
         light = 1 if mode == "light" else 0
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
@@ -429,14 +429,14 @@ class WindowsPlatform:
         try:
             from playwright.sync_api import sync_playwright
         except Exception as exc:
-            raise RuntimeError("未安装 Playwright，不能读取网页标题") from exc
+            raise RuntimeError("Playwright is not installed, so the page title cannot be read") from exc
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             try:
                 page = browser.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=15000)
                 if _cancelled(cancel_event):
-                    raise CancellationError("任务已停止")
+                    raise CancellationError("The task was stopped")
                 return page.title()
             finally:
                 browser.close()
@@ -502,4 +502,4 @@ class WindowsPlatform:
         array = (INPUT * len(events))(*events)
         sent = user32.SendInput(len(events), array, ctypes.sizeof(INPUT))
         if sent != len(events):
-            raise OSError("键盘输入没有完整发送")
+            raise OSError("The keyboard input was not fully sent")

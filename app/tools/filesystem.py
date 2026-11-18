@@ -94,7 +94,7 @@ class OpenFileArgs(BaseModel):
 
 class SpreadsheetArgs(BaseModel):
     path: str
-    headers: list[str] = Field(default_factory=lambda: ["日期", "类别", "金额", "备注"])
+    headers: list[str] = Field(default_factory=lambda: ["Date", "Category", "Amount", "Notes"])
     rows: list[list[str]] = Field(default_factory=list)
 
 
@@ -109,7 +109,7 @@ def _parse_time(value: str) -> datetime:
 def _safe_name(name: str) -> str:
     cleaned = "".join("_" if char in '<>:"/\\|?*' else char for char in name).strip().rstrip(".")
     if not cleaned or cleaned in {".", ".."}:
-        raise PermissionError("文件名无效")
+        raise PermissionError("The file name is invalid")
     return cleaned
 
 
@@ -127,7 +127,7 @@ def _metadata(path: Path) -> dict:
 
 def _reject_secret(path: Path, action: str) -> None:
     if is_secret_path(path):
-        raise PermissionError(f"已拒绝{action}敏感文件: {path.name}")
+        raise PermissionError(f"Refused {action}a sensitive file: {path.name}")
 
 
 def _roots(args_root: str | None, ctx: ToolContext) -> list[Path]:
@@ -198,13 +198,13 @@ def find_files(args: FindFilesArgs, ctx: ToolContext) -> ToolResult:
     matches.sort(key=lambda item: item["modified"], reverse=True)
     missing = [item["path"] for item in matches if not Path(item["path"]).exists()]
     if missing:
-        return ToolResult(ok=False, error="搜索结果未能核对", error_code="verification_failed")
+        return ToolResult(ok=False, error="The search results could not be verified", error_code="verification_failed")
     latest = matches[0]["path"] if matches else None
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail=f"已核对 {len(matches)} 个路径存在",
-        message=f"找到 {len(matches)} 个文件" + ("，结果已截断" if truncated else ""),
+        verification_detail=f"Verified {len(matches)} paths exist",
+        message=f"Found {len(matches)} files" + (", and the results were truncated" if truncated else ""),
         data={"matches": matches, "count": len(matches), "latest": latest, "truncated": truncated},
     )
 
@@ -212,7 +212,7 @@ def find_files(args: FindFilesArgs, ctx: ToolContext) -> ToolResult:
 def list_directory(args: ListDirectoryArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.guard.resolve(args.path, ctx.folders)
     if not path.is_dir():
-        return ToolResult(ok=False, error="目录不存在", error_code="not_found")
+        return ToolResult(ok=False, error="The directory does not exist", error_code="not_found")
     entries = []
     for child in sorted(path.iterdir(), key=lambda item: item.name.lower())[:500]:
         ctx.check_time()
@@ -226,8 +226,8 @@ def list_directory(args: ListDirectoryArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=path.exists(),
-        verification_detail="目录存在",
-        message=f"{path} 中有 {len(entries)} 个条目: {names}",
+        verification_detail="The directory exists",
+        message=f"{path} contains {len(entries)} entries: {names}",
         data={"path": str(path), "entries": entries, "count": len(entries)},
     )
 
@@ -235,18 +235,18 @@ def list_directory(args: ListDirectoryArgs, ctx: ToolContext) -> ToolResult:
 def get_file_metadata(args: MetadataArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.guard.resolve(args.path, ctx.folders)
     if not path.exists():
-        return ToolResult(ok=False, error="文件不存在", error_code="not_found")
+        return ToolResult(ok=False, error="The file does not exist", error_code="not_found")
     data = _metadata(path)
-    return ToolResult(ok=True, verified=True, verification_detail="已读取元数据", message=path.name, data=data)
+    return ToolResult(ok=True, verified=True, verification_detail="Read the metadata", message=path.name, data=data)
 
 
 def calculate_file_hash(args: HashArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.guard.resolve(args.path, ctx.folders)
-    _reject_secret(path, "计算")
+    _reject_secret(path, "hash")
     if not path.is_file():
-        return ToolResult(ok=False, error="不是文件", error_code="not_found")
+        return ToolResult(ok=False, error="Not a file", error_code="not_found")
     if path.stat().st_size > ctx.max_hash_bytes:
-        return ToolResult(ok=False, error="文件超过哈希大小限制", error_code="too_large")
+        return ToolResult(ok=False, error="The file exceeds the hash size limit", error_code="too_large")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
@@ -259,7 +259,7 @@ def calculate_file_hash(args: HashArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="已完成 SHA-256",
+        verification_detail="SHA-256 completed",
         message=value,
         data={"path": str(path), "sha256": value, "size": path.stat().st_size},
     )
@@ -308,13 +308,13 @@ def find_duplicates(args: DuplicateArgs, ctx: ToolContext) -> ToolResult:
     lines = []
     for group in duplicates[:20]:
         lines.append("、".join(group["paths"]))
-    summary = f"发现 {len(duplicates)} 组重复文件"
+    summary = f"Found {len(duplicates)} groups of duplicate files"
     if lines:
         summary = summary + "\n" + "\n".join(lines)
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="只生成重复项报告，没有删除文件",
+        verification_detail="Only a duplicate report was produced. No file was deleted.",
         message=summary,
         data={"groups": duplicates, "scanned": scanned, "skipped_large": skipped_large, "count": len(duplicates)},
     )
@@ -323,16 +323,16 @@ def find_duplicates(args: DuplicateArgs, ctx: ToolContext) -> ToolResult:
 def create_directory(args: CreateDirectoryArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.guard.resolve(args.path, ctx.folders)
     if path.exists() and not path.is_dir():
-        return ToolResult(ok=False, error="同名文件已存在", error_code="exists")
+        return ToolResult(ok=False, error="A file with that name already exists", error_code="exists")
     path.mkdir(parents=True, exist_ok=True)
     verified = path.is_dir()
     return ToolResult(
         ok=verified,
         verified=verified,
-        verification_detail="目录已存在" if verified else "目录创建后仍不存在",
-        message=f"目录已准备: {path}",
+        verification_detail="The directory already exists" if verified else "The directory still does not exist after creation",
+        message=f"Directory is ready: {path}",
         data={"path": str(path)},
-        error=None if verified else "未能核对目录",
+        error=None if verified else "Could not verify the directory",
     )
 
 
@@ -341,51 +341,51 @@ def _preflight_write(path: Path, summary: str) -> Preflight:
         summary=summary,
         paths=[str(path)],
         will_overwrite=path.exists(),
-        impact=f"将写入 {path}" + ("，并覆盖现有文件" if path.exists() else ""),
+        impact=f"Will write {path}" + (", and overwrite the existing file" if path.exists() else ""),
     )
 
 
 def preflight_text(args: CreateTextArgs, ctx: ToolContext) -> Preflight:
-    return _preflight_write(ctx.guard.resolve(args.path, ctx.folders), "创建文本文件")
+    return _preflight_write(ctx.guard.resolve(args.path, ctx.folders), "Create a text file")
 
 
 def create_text_file(args: CreateTextArgs, ctx: ToolContext) -> ToolResult:
     if len(args.content) > 100_000:
-        return ToolResult(ok=False, error="文本过长", error_code="too_large")
+        return ToolResult(ok=False, error="The text is too long", error_code="too_large")
     path = ctx.guard.resolve(args.path, ctx.folders)
-    _reject_secret(path, "写入")
+    _reject_secret(path, "write")
     if path.exists() and not ctx.approved:
-        raise PermissionError("覆盖文件需要确认")
+        raise PermissionError("Overwriting a file requires confirmation")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(args.content, encoding="utf-8")
     verified = path.is_file() and path.read_text(encoding="utf-8") == args.content
     return ToolResult(
         ok=verified,
         verified=verified,
-        verification_detail="已回读文件内容",
-        message=f"已写入 {path}",
+        verification_detail="Read the file content back",
+        message=f"Wrote {path}",
         data={"path": str(path), "destination": str(path)},
-        error=None if verified else "写入后的内容核对失败",
+        error=None if verified else "The content did not match after writing",
     )
 
 
 def preflight_spreadsheet(args: SpreadsheetArgs, ctx: ToolContext) -> Preflight:
-    return _preflight_write(ctx.guard.resolve(args.path, ctx.folders), "创建表格")
+    return _preflight_write(ctx.guard.resolve(args.path, ctx.folders), "Create a spreadsheet")
 
 
 def create_spreadsheet(args: SpreadsheetArgs, ctx: ToolContext) -> ToolResult:
     from openpyxl import Workbook
 
     if len(args.rows) > 500:
-        return ToolResult(ok=False, error="行数过多", error_code="too_large")
+        return ToolResult(ok=False, error="There are too many rows", error_code="too_large")
     path = ctx.guard.resolve(args.path, ctx.folders)
-    _reject_secret(path, "写入")
+    _reject_secret(path, "write")
     if path.exists() and not ctx.approved:
-        raise PermissionError("覆盖文件需要确认")
+        raise PermissionError("Overwriting a file requires confirmation")
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "支出"
+    sheet.title = "Expenses"
     sheet.append(list(args.headers))
     for row in args.rows:
         sheet.append(list(row))
@@ -394,10 +394,10 @@ def create_spreadsheet(args: SpreadsheetArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=verified,
         verified=verified,
-        verification_detail="表格文件已生成且非空",
-        message=f"已创建表格 {path}",
+        verification_detail="The spreadsheet file was created and is not empty",
+        message=f"Created spreadsheet {path}",
         data={"path": str(path), "destination": str(path)},
-        error=None if verified else "表格核对失败",
+        error=None if verified else "Spreadsheet verification failed",
     )
 
 
@@ -406,22 +406,22 @@ def preflight_rename(args: RenameArgs, ctx: ToolContext) -> Preflight:
     destination = source.with_name(_safe_name(args.new_name))
     ctx.guard.resolve(str(destination), ctx.folders)
     return Preflight(
-        summary="重命名文件",
+        summary="Rename a file",
         paths=[str(source), str(destination)],
         will_overwrite=destination.exists(),
-        impact=f"将 {source} 重命名为 {destination.name}",
+        impact=f"Will {source} be renamed to {destination.name}",
     )
 
 
 def rename_file(args: RenameArgs, ctx: ToolContext) -> ToolResult:
     source = ctx.guard.resolve(args.source, ctx.folders)
-    _reject_secret(source, "重命名")
+    _reject_secret(source, "rename")
     destination = source.with_name(_safe_name(args.new_name))
     ctx.guard.resolve(str(destination), ctx.folders)
     if not source.exists():
-        return ToolResult(ok=False, error="源文件不存在", error_code="not_found")
+        return ToolResult(ok=False, error="The source file does not exist", error_code="not_found")
     if destination.exists() and not ctx.approved:
-        raise PermissionError("覆盖文件需要确认")
+        raise PermissionError("Overwriting a file requires confirmation")
     size = source.stat().st_size if source.is_file() else None
     shutil.move(str(source), str(destination))
     verified = destination.exists() and not source.exists()
@@ -430,10 +430,10 @@ def rename_file(args: RenameArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=verified,
         verified=verified,
-        verification_detail="源路径已消失，目标路径存在",
-        message=f"已重命名为 {destination}",
+        verification_detail="The source path is gone and the destination exists",
+        message=f"Renamed to {destination}",
         data={"source": str(source), "destination": str(destination), "removed_sources": [str(source)]},
-        error=None if verified else "重命名后核对失败",
+        error=None if verified else "Verification failed after renaming",
     )
 
 
@@ -451,16 +451,16 @@ def preflight_transfer(args: TransferArgs, ctx: ToolContext) -> Preflight:
         paths.extend([str(source), str(destination)])
         overwrite = overwrite or destination.exists()
     return Preflight(
-        summary="转移文件",
+        summary="Transfer files",
         paths=paths,
         will_overwrite=overwrite,
-        impact=f"将处理 {len(args.paths)} 个文件，目标目录 {directory}",
+        impact=f"Will process {len(args.paths)} files into {directory}",
     )
 
 
 def _transfer(args: TransferArgs, ctx: ToolContext, move: bool) -> ToolResult:
     if len(args.paths) > MAX_BATCH:
-        return ToolResult(ok=False, error="一次处理的文件过多", error_code="too_large")
+        return ToolResult(ok=False, error="Too many files for one operation", error_code="too_large")
     directory = ctx.guard.resolve(args.destination_directory, ctx.folders)
     directory.mkdir(parents=True, exist_ok=True)
     moved: list[str] = []
@@ -468,13 +468,13 @@ def _transfer(args: TransferArgs, ctx: ToolContext, move: bool) -> ToolResult:
     for raw in args.paths:
         ctx.check_time()
         source = ctx.guard.resolve(raw, ctx.folders)
-        _reject_secret(source, "转移")
+        _reject_secret(source, "transfer")
         if not source.exists():
-            return ToolResult(ok=False, error=f"源文件不存在: {source}", error_code="not_found", data={"moved": moved})
+            return ToolResult(ok=False, error=f"The source file does not exist: {source}", error_code="not_found", data={"moved": moved})
         destination = _destination_for(source, directory)
         ctx.guard.resolve(str(destination), ctx.folders)
         if destination.exists() and not ctx.approved:
-            raise PermissionError(f"覆盖文件需要确认: {destination}")
+            raise PermissionError(f"Overwriting a file requires confirmation: {destination}")
         size = source.stat().st_size if source.is_file() else None
         if move:
             shutil.move(str(source), str(destination))
@@ -485,16 +485,16 @@ def _transfer(args: TransferArgs, ctx: ToolContext, move: bool) -> ToolResult:
             else:
                 shutil.copy2(source, destination)
         if not destination.exists():
-            return ToolResult(ok=False, error=f"目标未出现: {destination}", error_code="verification_failed")
+            return ToolResult(ok=False, error=f"The destination did not appear: {destination}", error_code="verification_failed")
         if size is not None and destination.is_file() and destination.stat().st_size != size:
-            return ToolResult(ok=False, error=f"大小不一致: {destination}", error_code="verification_failed")
+            return ToolResult(ok=False, error=f"The size does not match: {destination}", error_code="verification_failed")
         moved.append(str(destination))
-    action = "移动" if move else "复制"
+    action = "move" if move else "copy"
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail=f"已核对{action}结果",
-        message=f"已{action} {len(moved)} 个文件到 {directory}" if moved else "没有文件需要处理",
+        verification_detail=f"Verified the {action} result",
+        message=f"{action.capitalize()} {len(moved)} files to {directory}" if moved else "No files needed to be processed",
         data={"destinations": moved, "removed_sources": removed, "count": len(moved), "path": str(directory)},
     )
 
@@ -514,27 +514,27 @@ def preflight_recycle(args: RecycleArgs, ctx: ToolContext) -> Preflight:
         path = Path(raw)
         if path.exists():
             meta = _metadata(path)
-            details.append(f"{meta['path']} ({meta['size']} 字节)")
+            details.append(f"{meta['path']} ({meta['size']} bytes)")
         else:
-            details.append(f"{raw} （不存在）")
+            details.append(f"{raw} (missing)")
     return Preflight(
-        summary="移动到回收站",
+        summary="Move to the Recycle Bin",
         paths=paths,
         will_overwrite=False,
-        impact="这些项目会进入回收站，不会永久删除。\n" + "\n".join(details),
+        impact="These items go to the Recycle Bin and are not permanently deleted.\n" + "\n".join(details),
     )
 
 
 def move_to_recycle_bin(args: RecycleArgs, ctx: ToolContext) -> ToolResult:
     if not ctx.approved:
-        raise PermissionError("放入回收站必须经过这次操作的确认")
+        raise PermissionError("Moving to the Recycle Bin requires confirmation for this action")
     if len(args.paths) > MAX_BATCH:
-        return ToolResult(ok=False, error="一次处理的文件过多", error_code="too_large")
+        return ToolResult(ok=False, error="Too many files for one operation", error_code="too_large")
     targets = [ctx.guard.resolve(raw, ctx.folders) for raw in args.paths]
     for path in targets:
-        _reject_secret(path, "移入回收站")
+        _reject_secret(path, "recycle")
         if not path.exists():
-            return ToolResult(ok=False, error=f"文件不存在: {path}", error_code="not_found")
+            return ToolResult(ok=False, error=f"The file does not exist: {path}", error_code="not_found")
     trashed: list[str] = []
     for path in targets:
         ctx.check_time()
@@ -543,14 +543,14 @@ def move_to_recycle_bin(args: RecycleArgs, ctx: ToolContext) -> ToolResult:
         except Exception as exc:
             return ToolResult(
                 ok=False,
-                error=f"回收站操作失败，已停止，没有永久删除。原因: {exc}",
+                error=f"The Recycle Bin operation failed and stopped. The file was not permanently deleted. Reason: {exc}",
                 error_code="recycle_failed",
                 data={"targets": trashed},
             )
         if path.exists():
             return ToolResult(
                 ok=False,
-                error=f"回收站操作后文件仍在，已停止，没有永久删除: {path}",
+                error=f"The file was still present after the Recycle Bin operation, so it stopped. It was not permanently deleted: {path}",
                 error_code="verification_failed",
                 data={"targets": trashed},
             )
@@ -558,8 +558,8 @@ def move_to_recycle_bin(args: RecycleArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="源路径已消失，且只调用了回收站接口",
-        message=f"已将 {len(trashed)} 个项目移到回收站",
+        verification_detail="The source path is gone, and only the Recycle Bin interface was called",
+        message=f"Moved {len(trashed)} items to the Recycle Bin",
         data={"targets": trashed, "count": len(trashed)},
     )
 
@@ -593,7 +593,7 @@ _EXT_GROUPS = {
 def preview_organize(args: OrganizeArgs, ctx: ToolContext) -> ToolResult:
     root = ctx.guard.resolve(args.root, ctx.folders)
     if not root.is_dir():
-        return ToolResult(ok=False, error="目录不存在", error_code="not_found")
+        return ToolResult(ok=False, error="The directory does not exist", error_code="not_found")
     operations = []
     overwrite = False
     for child in root.iterdir():
@@ -611,8 +611,8 @@ def preview_organize(args: OrganizeArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="只生成整理预览，没有移动文件",
-        message=f"可整理 {len(operations)} 个文件",
+        verification_detail="Only an organization preview was created. No file was moved.",
+        message=f"Can organize {len(operations)} files",
         data={"operations": operations, "count": len(operations), "will_overwrite": overwrite, "root": str(root)},
     )
 
@@ -626,53 +626,57 @@ def preflight_apply(args: ApplyMovesArgs, ctx: ToolContext) -> Preflight:
         paths.extend([str(source), str(destination)])
         overwrite = overwrite or destination.exists()
     return Preflight(
-        summary="按扩展名整理",
+        summary="Organize by extension",
         paths=paths,
         will_overwrite=overwrite,
-        impact=f"将移动 {len(args.operations)} 个文件。拒绝后不会改动。",
+        impact=f"Will move {len(args.operations)} files. Denying this changes nothing.",
     )
 
 
 def apply_moves(args: ApplyMovesArgs, ctx: ToolContext) -> ToolResult:
     if args.operations and not ctx.approved:
-        raise PermissionError("批量移动必须经过这次预览的确认")
+        raise PermissionError("A batch move requires confirmation of this preview")
     completed = []
     for item in args.operations:
         ctx.check_time()
         source = ctx.guard.resolve(str(item.get("src", "")), ctx.folders)
         destination = ctx.guard.resolve(str(item.get("dst", "")), ctx.folders)
-        _reject_secret(source, "移动")
+        _reject_secret(source, "move")
         if not source.exists():
-            return ToolResult(ok=False, error=f"源文件不存在: {source}", error_code="not_found", data={"moved": completed})
+            return ToolResult(ok=False, error=f"The source file does not exist: {source}", error_code="not_found", data={"moved": completed})
         if destination.exists() and not ctx.approved:
-            raise PermissionError("覆盖文件需要确认")
+            raise PermissionError("Overwriting a file requires confirmation")
         destination.parent.mkdir(parents=True, exist_ok=True)
         size = source.stat().st_size
         shutil.move(str(source), str(destination))
         if source.exists() or not destination.exists() or destination.stat().st_size != size:
-            return ToolResult(ok=False, error=f"移动后核对失败: {destination}", error_code="verification_failed")
+            return ToolResult(ok=False, error=f"Verification failed after the move: {destination}", error_code="verification_failed")
         completed.append({"src": str(source), "dst": str(destination)})
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="每个目标都已核对大小，源路径已消失",
-        message=f"已整理 {len(completed)} 个文件" if completed else "没有需要移动的文件",
+        verification_detail="Every destination size was checked, and the source paths are gone",
+        message=f"Organized {len(completed)} files" if completed else "No files needed to be moved",
         data={"moved": completed, "count": len(completed), "removed_sources": [item["src"] for item in completed]},
     )
 
 
 def open_file(args: OpenFileArgs, ctx: ToolContext) -> ToolResult:
     path = ctx.guard.resolve(args.path, ctx.folders)
-    _reject_secret(path, "打开")
+    _reject_secret(path, "open")
     if not path.is_file():
-        return ToolResult(ok=False, error="文件不存在", error_code="not_found")
+        return ToolResult(ok=False, error="The file does not exist", error_code="not_found")
     ctx.platform.startfile(str(path))
     confirmed = _wait_for_title(ctx, path.stem, timeout=8)
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="已调用系统打开，并检查窗口标题" if confirmed else "已调用系统打开，但未在超时内确认窗口",
-        message=f"已打开 {path.name}" + ("" if confirmed else "（窗口未确认）"),
+        verification_detail=(
+            "Asked the system to open the file and checked the window title"
+            if confirmed
+            else "Asked the system to open the file, but the window was not confirmed before the timeout"
+        ),
+        message=f"Opened {path.name}" + ("" if confirmed else " (window not confirmed)"),
         data={"path": str(path), "issued": True, "confirmed": confirmed},
     )
 

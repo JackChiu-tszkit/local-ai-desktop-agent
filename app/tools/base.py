@@ -34,11 +34,11 @@ class ToolContext:
     def check_time(self) -> None:
         now = time.monotonic()
         if getattr(self.cancel_event, "is_set", lambda: False)():
-            raise CancellationError("任务已停止")
+            raise CancellationError("The task was stopped")
         if now > self.task_deadline:
-            raise TimeoutError("任务超时")
+            raise TimeoutError("The task timed out")
         if now > self.step_deadline:
-            raise TimeoutError("步骤超时")
+            raise TimeoutError("The step timed out")
 
 
 @dataclass

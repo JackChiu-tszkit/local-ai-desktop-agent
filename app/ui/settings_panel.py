@@ -27,34 +27,34 @@ from app.storage.secrets import delete_api_key, load_api_key, store_api_key
 class SettingsPanel(QDialog):
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("设置")
+        self.setWindowTitle("Settings")
         self.resize(560, 640)
         self._settings = settings
         self._result: AppSettings | None = None
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.provider = QComboBox()
-        self.provider.addItem("本地 Ollama", "ollama")
-        self.provider.addItem("云端（需手动开启）", "cloud")
+        self.provider.addItem("Local Ollama", "ollama")
+        self.provider.addItem("Cloud (must be turned on)", "cloud")
         self.provider.setCurrentIndex(0 if settings.provider == "ollama" else 1)
         self.ollama_url = QLineEdit(settings.ollama_base_url)
         self.ollama_model = QLineEdit(settings.ollama_model)
-        self.ollama_vision = QCheckBox("本地模型支持视觉，允许把本地截屏发给它")
+        self.ollama_vision = QCheckBox("The local model supports vision and may receive local screenshots")
         self.ollama_vision.setChecked(settings.ollama_vision)
-        self.cloud_enabled = QCheckBox("开启云端推理")
+        self.cloud_enabled = QCheckBox("Enable cloud inference")
         self.cloud_enabled.setChecked(settings.cloud_enabled)
         self.cloud_url = QLineEdit(settings.cloud_base_url)
         self.cloud_model = QLineEdit(settings.cloud_model)
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key.setPlaceholderText("留空则保持凭据管理器中的现有密钥")
-        self.cloud_screenshots = QCheckBox("允许把截屏发送到云端")
+        self.api_key.setPlaceholderText("Leave blank to keep the key already in Credential Manager")
+        self.cloud_screenshots = QCheckBox("Allow screenshots to be sent to the cloud")
         self.cloud_screenshots.setChecked(settings.cloud_allow_screenshots)
-        self.cloud_files = QCheckBox("允许把文件内容发送到云端")
+        self.cloud_files = QCheckBox("Allow file contents to be sent to the cloud")
         self.cloud_files.setChecked(settings.cloud_allow_file_contents)
-        self.cloud_paths = QCheckBox("允许把文件路径发送到云端")
+        self.cloud_paths = QCheckBox("Allow file paths to be sent to the cloud")
         self.cloud_paths.setChecked(settings.cloud_allow_paths)
-        self.cloud_vision = QCheckBox("云端模型支持视觉")
+        self.cloud_vision = QCheckBox("The cloud model supports vision")
         self.cloud_vision.setChecked(settings.cloud_vision)
         self.task_timeout = QSpinBox()
         self.task_timeout.setRange(10, 3600)
@@ -65,23 +65,27 @@ class SettingsPanel(QDialog):
         self.max_steps = QSpinBox()
         self.max_steps.setRange(1, 30)
         self.max_steps.setValue(settings.max_steps)
-        form.addRow("推理来源", self.provider)
-        form.addRow("Ollama 地址", self.ollama_url)
-        form.addRow("Ollama 模型", self.ollama_model)
+        form.addRow("Provider", self.provider)
+        form.addRow("Ollama address", self.ollama_url)
+        form.addRow("Ollama model", self.ollama_model)
         form.addRow("", self.ollama_vision)
         form.addRow("", self.cloud_enabled)
-        form.addRow("云端地址", self.cloud_url)
-        form.addRow("云端模型", self.cloud_model)
-        form.addRow("API 密钥", self.api_key)
+        form.addRow("Cloud address", self.cloud_url)
+        form.addRow("Cloud model", self.cloud_model)
+        form.addRow("API key", self.api_key)
         form.addRow("", self.cloud_screenshots)
         form.addRow("", self.cloud_files)
         form.addRow("", self.cloud_paths)
         form.addRow("", self.cloud_vision)
-        form.addRow("任务超时（秒）", self.task_timeout)
-        form.addRow("步骤超时（秒）", self.step_timeout)
-        form.addRow("最大步骤数", self.max_steps)
+        form.addRow("Task timeout (seconds)", self.task_timeout)
+        form.addRow("Step timeout (seconds)", self.step_timeout)
+        form.addRow("Maximum steps", self.max_steps)
         layout.addLayout(form)
-        note = QLabel("云端默认关闭。开启后，只有你输入的指令会发送出去；文件内容、路径和截屏仍需各自单独勾选。密钥写入 Windows 凭据管理器，不写入数据库。")
+        note = QLabel(
+            "Cloud is off by default. After it is turned on, only the instruction you type is sent. "
+            "File contents, paths, and screenshots each need their own checkbox. "
+            "Keys are stored in Windows Credential Manager, not in the database."
+        )
         note.setWordWrap(True)
         note.setObjectName("subtle")
         layout.addWidget(note)
@@ -89,13 +93,13 @@ class SettingsPanel(QDialog):
             self._key_stored = bool(load_api_key())
         except Exception:
             self._key_stored = False
-        self.key_label = QLabel("凭据管理器中已有密钥。" if self._key_stored else "凭据管理器中还没有密钥。")
+        self.key_label = QLabel("A key is stored in Credential Manager." if self._key_stored else "No key is stored in Credential Manager.")
         layout.addWidget(self.key_label)
         row = QHBoxLayout()
-        test = QPushButton("测试连接")
+        test = QPushButton("Test connection")
         test.setObjectName("secondary")
         test.clicked.connect(self._test_connection)
-        clear = QPushButton("清除密钥")
+        clear = QPushButton("Clear key")
         clear.setObjectName("secondary")
         clear.clicked.connect(self._clear_key)
         row.addWidget(test)
@@ -140,12 +144,12 @@ class SettingsPanel(QDialog):
             try:
                 store_api_key(secret)
             except Exception as exc:
-                QMessageBox.warning(self, "密钥没有保存", f"无法写入凭据管理器：{exc}")
+                QMessageBox.warning(self, "Key was not saved", f"Could not write to Credential Manager: {exc}")
                 return
         try:
             settings.save()
         except Exception as exc:
-            QMessageBox.warning(self, "设置没有保存", str(exc))
+            QMessageBox.warning(self, "Settings were not saved", str(exc))
             return
         self._result = settings
         self.accept()
@@ -154,10 +158,10 @@ class SettingsPanel(QDialog):
         try:
             delete_api_key()
         except Exception as exc:
-            QMessageBox.warning(self, "没有清除密钥", str(exc))
+            QMessageBox.warning(self, "Key was not cleared", str(exc))
             return
         self.api_key.clear()
-        self.key_label.setText("凭据管理器中还没有密钥。")
+        self.key_label.setText("No key is stored in Credential Manager.")
 
     def _test_connection(self) -> None:
         settings = self._collect()
@@ -178,5 +182,5 @@ class SettingsPanel(QDialog):
                 self.done.emit(ok, message)
 
         self._ping = Ping(self)
-        self._ping.done.connect(lambda ok, message: QMessageBox.information(self, "连接测试", message))
+        self._ping.done.connect(lambda ok, message: QMessageBox.information(self, "Connection test", message))
         self._ping.start()

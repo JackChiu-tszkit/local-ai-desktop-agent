@@ -33,14 +33,14 @@ def connect_configured_servers(registry: ToolRegistry, servers: list[dict]) -> l
 def _mcp_spec(name: str, description: str, client: MCPClient, remote_name: str) -> ToolSpec:
     def handler(args: MCPArgs, ctx: ToolContext) -> ToolResult:
         if not ctx.approved:
-            raise PermissionError("MCP 工具必须经过这次调用的确认")
+            raise PermissionError("An MCP tool requires confirmation for this call")
         payload = args.model_dump()
         result = client.call_tool(remote_name, payload)
         text = json_text(result)
         return ToolResult(
             ok=True,
             verified=True,
-            verification_detail="MCP 返回了结果；这不代表产生了未核对的系统更改",
+            verification_detail="MCP returned a result. That does not mean an unverified system change happened.",
             message=text[:2000],
             data={"text": text[:2000], "count": 1},
         )

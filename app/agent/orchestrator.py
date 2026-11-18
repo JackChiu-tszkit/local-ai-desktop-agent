@@ -184,7 +184,7 @@ class DesktopAgent:
 
     def _plan_node(self, state: dict) -> dict:
         if self._stopped():
-            return {"route": "final", "status": "cancelled", "error": "任务已停止"}
+            return {"route": "final", "status": "cancelled", "error": "The task was stopped"}
         plan = self.planner.plan(state["instruction"], state.get("observations") or None)
         if plan.reactive:
             task_id = state.get("task_id") or uuid.uuid4().hex
@@ -238,9 +238,9 @@ class DesktopAgent:
 
     def _execute_node(self, state: dict) -> dict:
         if self._stopped():
-            return {"route": "final", "status": "cancelled", "error": "任务已停止"}
+            return {"route": "final", "status": "cancelled", "error": "The task was stopped"}
         if time.monotonic() > self.task_deadline:
-            return {"route": "final", "status": "failed", "error": "任务超时"}
+            return {"route": "final", "status": "failed", "error": "The task timed out"}
         plan = copy.deepcopy(state["plan"])
         steps = plan["steps"]
         cursor = int(state.get("cursor", 0))
@@ -251,7 +251,7 @@ class DesktopAgent:
         prior = [item for item in state.get("signatures", []) if item.get("sig") == signature]
         if not plan.get("reactive") and (any(item.get("ok") for item in prior) or len(prior) >= 2):
             step["status"] = "failed"
-            step["error"] = "检测到重复操作，已停止"
+            step["error"] = "Stopped because the same action was repeated"
             plan["steps"][cursor] = step
             return {"route": "final", "status": "failed", "plan": plan, "error": step["error"]}
         ctx = self._context()
@@ -264,7 +264,7 @@ class DesktopAgent:
                 ctx=ctx,
             )
         except CancellationError:
-            return {"route": "final", "status": "cancelled", "plan": plan, "error": "任务已停止"}
+            return {"route": "final", "status": "cancelled", "plan": plan, "error": "The task was stopped"}
         plan["steps"][cursor] = step
         self._emit(step)
         return {"route": "verify", "plan": plan, "last_result": result.model_dump(mode="json"), "active_signature": signature}
@@ -318,7 +318,7 @@ class DesktopAgent:
         self.database.save_step(state["task_id"], cursor, step, result.data)
         self._emit(step)
         if route == "clarify":
-            clarification = result.error or "请更具体地说明目标。"
+            clarification = result.error or "Please describe the goal more specifically."
             return {
                 "route": "final",
                 "status": "needs_clarification",
@@ -362,22 +362,22 @@ class DesktopAgent:
 
     def _decide_node(self, state: dict) -> dict:
         if self._stopped():
-            return {"route": "final", "status": "cancelled", "error": "任务已停止"}
+            return {"route": "final", "status": "cancelled", "error": "The task was stopped"}
         if time.monotonic() > self.task_deadline:
-            return {"route": "final", "status": "failed", "error": "任务超时"}
+            return {"route": "final", "status": "failed", "error": "The task timed out"}
         plan = copy.deepcopy(state.get("plan") or {})
         steps = list(plan.get("steps") or [])
         observations = list(state.get("observations") or [])
         if _same_action_repeated(observations):
-            return {"route": "final", "status": "failed", "plan": plan, "error": "同样的操作连续三次没有改变结果，已停止"}
+            return {"route": "final", "status": "failed", "plan": plan, "error": "Stopped after the same action succeeded three times without a new result"}
         if len(steps) >= max(self.settings.max_steps, 16):
-            return {"route": "final", "status": "failed", "plan": plan, "error": "步数已用完，模型还没有结束"}
+            return {"route": "final", "status": "failed", "plan": plan, "error": "The step limit was reached before the model finished"}
         provider = desktop_provider(self.provider, self.settings)
         if provider is None:
             return {
                 "route": "final",
                 "status": "needs_clarification",
-                "clarification": "没有可用的模型来看屏幕。",
+                "clarification": "No model is available to look at the screen.",
                 "plan": plan,
             }
         instruction = state.get("instruction", "")
@@ -385,20 +385,20 @@ class DesktopAgent:
         if site and not plan.get("site_opened"):
             plan["site_opened"] = True
             plan["nav_url"] = site
-            return self._queue_desktop(state, plan, steps, "open_browser", {"url": site}, "用浏览器打开 YouTube 搜索")
+            return self._queue_desktop(state, plan, steps, "open_browser", {"url": site}, "Open a YouTube search in the browser")
         window = self.platform.find_window("YouTube") if site and plan.get("site_opened") else None
         if site and plan.get("site_opened") and window is None:
             plan["nav_waits"] = int(plan.get("nav_waits") or 0) + 1
             if plan["nav_waits"] > 12:
-                return {"route": "final", "status": "failed", "plan": plan, "error": "浏览器没有打开 YouTube"}
+                return {"route": "final", "status": "failed", "plan": plan, "error": "The browser did not open YouTube"}
             time.sleep(0.8)
             return {"route": "decide", "plan": plan, "observations": observations}
         if window and not plan.get("site_title"):
             plan["site_title"] = window["title"]
         elif window and plan.get("page_clicks") and window["title"] != plan.get("site_title"):
-            return {"route": "final", "status": "completed", "plan": plan, "clarification": f"已进入视频：{window['title']}"}
+            return {"route": "final", "status": "completed", "plan": plan, "clarification": f"Opened the video: {window['title']}"}
         if int(plan.get("page_clicks") or 0) >= 3:
-            return {"route": "final", "status": "failed", "plan": plan, "error": "已经点过视频，但页面没有开始播放"}
+            return {"route": "final", "status": "failed", "plan": plan, "error": "A video was clicked, but playback did not start"}
         if observations:
             time.sleep(0.8)
         image_path, image_size, _pixels = self._capture_desktop(window)
@@ -417,7 +417,7 @@ class DesktopAgent:
             action = next_desktop_action(
                 provider,
                 settings=self.settings,
-                instruction="只点击 YouTube 搜索结果里的第一个视频。不要打字。" if site else instruction,
+                instruction="Click only the first video in the YouTube search results. Do not type." if site else instruction,
                 history=observations,
                 image_path=image_path,
                 windows=self.platform.window_titles(),
@@ -431,7 +431,7 @@ class DesktopAgent:
             return {
                 "route": "final",
                 "status": "needs_clarification",
-                "clarification": f"模型没有给出可执行的下一步：{exc}",
+                "clarification": f"The model did not provide a runnable next step: {exc}",
                 "plan": plan,
             }
         if action["done"] and (not site or plan.get("page_clicks")):
@@ -440,7 +440,7 @@ class DesktopAgent:
             action = _video_click(window, int(plan.get("page_clicks") or 0))
         if action["tool"] == "wait":
             time.sleep(min(3.0, max(0.2, float(action["arguments"].get("ms", 1000)) / 1000)))
-            observations.append({"tool": "wait", "arguments": {}, "ok": True, "message": "已等待画面稳定", "error": None})
+            observations.append({"tool": "wait", "arguments": {}, "ok": True, "message": "Waited for the screen to settle", "error": None})
             return {"route": "decide", "plan": plan, "observations": observations}
         if window and action["tool"] == "click":
             self.platform.focus_window("YouTube")
@@ -456,7 +456,7 @@ class DesktopAgent:
             "arguments": arguments,
             "risk": "medium",
             "requires_approval": False,
-            "expected_result": "这一步由模型根据屏幕选出",
+            "expected_result": "The model chose this step from the screen",
             "actual_result": None,
             "status": "pending",
             "error": None,
@@ -587,7 +587,7 @@ def _video_click(window: dict, attempt: int) -> dict:
         "done": False,
         "tool": "click",
         "arguments": {"x": window["left"] + int(width * 0.34), "y": window["top"] + int(height * y_ratio)},
-        "objective": "点击搜索结果里的视频",
+        "objective": "Click a video in the search results",
     }
 
 

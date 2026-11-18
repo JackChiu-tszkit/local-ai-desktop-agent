@@ -24,10 +24,6 @@ LOGICAL_ALIASES = {
     "pictures": "pictures",
     "photo": "pictures",
     "photos": "pictures",
-    "下载": "downloads",
-    "文档": "documents",
-    "桌面": "desktop",
-    "图片": "pictures",
 }
 
 SECRET_FILENAMES = {
@@ -109,27 +105,27 @@ class PathGuard:
 
     def resolve(self, raw: str, folders: dict[str, Path] | None = None) -> Path:
         if raw is None or not str(raw).strip():
-            raise PermissionError("路径为空")
+            raise PermissionError("The path is empty")
         text = str(raw).strip().strip('"').strip("'")
         self._reject_special(text)
         logical = self._from_logical(text, folders or {})
         candidate = logical if logical is not None else Path(text)
         if logical is None and not candidate.is_absolute():
-            raise PermissionError("相对路径不被允许，请使用文档、下载、桌面、图片或绝对路径")
+            raise PermissionError("Relative paths are not allowed. Use Documents, Downloads, Desktop, Pictures, or an absolute path.")
         resolved = self._harden(candidate)
         self._ensure(resolved)
         leaf = resolved.name.split(".")[0].lower()
         if leaf in DEVICE_NAMES:
-            raise PermissionError("路径使用了保留设备名")
+            raise PermissionError("The path uses a reserved device name")
         return resolved
 
     def _reject_special(self, text: str) -> None:
         normalized = text.replace("/", "\\")
         if normalized.startswith("\\\\"):
-            raise PermissionError("不允许网络路径或设备路径")
+            raise PermissionError("Network paths and device paths are not allowed")
         rest = normalized[2:] if len(normalized) > 2 and normalized[1] == ":" else normalized
         if ":" in rest:
-            raise PermissionError("不允许备用数据流")
+            raise PermissionError("Alternate data streams are not allowed")
 
     def _from_logical(self, text: str, folders: dict[str, Path]) -> Path | None:
         parts = [part for part in text.replace("\\", "/").split("/") if part]
@@ -141,7 +137,7 @@ class PathGuard:
         base = folders.get(key) or folders[parts[0]]
         extra = parts[1:]
         if any(part in {".", ".."} for part in extra):
-            raise PermissionError("路径不能包含上级目录跳转")
+            raise PermissionError("The path cannot contain a parent-directory jump")
         return Path(base).joinpath(*extra)
 
     def _harden(self, candidate: Path) -> Path:
@@ -158,15 +154,15 @@ class PathGuard:
         base = Path(os.path.realpath(current))
         for name in reversed(missing):
             if name in {".", ".."}:
-                raise PermissionError("非法路径")
+                raise PermissionError("The path is invalid")
             base = base / name
         return base
 
     def _ensure(self, resolved: Path) -> None:
         if self._under_any(resolved, self.protected_prefixes):
-            raise PermissionError(f"路径受保护，已拒绝: {resolved}")
+            raise PermissionError(f"The path is protected and was refused: {resolved}")
         if not self._under_any(resolved, self.allowed_roots):
-            raise PermissionError(f"路径超出允许范围，已拒绝: {resolved}")
+            raise PermissionError(f"The path is outside the allowed scope and was refused: {resolved}")
 
     @staticmethod
     def _under_any(path: Path, roots: list[Path]) -> bool:

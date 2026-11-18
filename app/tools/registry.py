@@ -119,7 +119,7 @@ class ToolRegistry:
 
     def add(self, spec: ToolSpec) -> None:
         if spec.name in {"shell", "powershell", "cmd", "exec", "python", "delete_file", "permanent_delete"}:
-            raise ValueError(f"禁止注册工具 {spec.name}")
+            raise ValueError(f"Refusing to register tool {spec.name}")
         self._tools[spec.name] = spec
 
     def names(self) -> list[str]:
@@ -149,7 +149,7 @@ class ToolRegistry:
         except ValidationError as exc:
             return spec.args_model.model_construct(), ToolResult(ok=False, error=str(exc), error_code="permission")
         if spec.requires_granted_flag and not ctx.approved:
-            raise PermissionError(f"{name} 必须经过确认")
+            raise PermissionError(f"{name} requires confirmation")
         result = spec.handler(model, ctx)
         return model, result
 
@@ -164,48 +164,54 @@ class ToolRegistry:
 def build_registry() -> ToolRegistry:
     registry = ToolRegistry()
     specs = [
-        _spec("find_files", "按名称、扩展名、大小和修改时间搜索允许目录中的文件", FindFilesArgs, find_files),
-        _spec("list_directory", "列出一个允许目录的直接内容", ListDirectoryArgs, list_directory),
-        _spec("get_file_metadata", "读取文件大小和修改时间", MetadataArgs, get_file_metadata),
-        _spec("calculate_file_hash", "计算普通文件的 SHA-256", HashArgs, calculate_file_hash),
-        _spec("find_duplicates", "在一个目录内查找内容相同的文件，不删除", DuplicateArgs, find_duplicates),
-        _spec("create_directory", "在允许范围内创建目录", CreateDirectoryArgs, create_directory),
-        _spec("create_text_file", "写入一个文本文件", CreateTextArgs, create_text_file, preflight_text),
-        _spec("create_spreadsheet", "创建一个 xlsx 表格", SpreadsheetArgs, create_spreadsheet, preflight_spreadsheet),
-        _spec("rename_file", "重命名一个文件", RenameArgs, rename_file, preflight_rename),
-        _spec("copy_files", "复制文件到允许的目录", TransferArgs, copy_files, preflight_transfer),
-        _spec("move_files", "移动文件到允许的目录", TransferArgs, move_files, preflight_transfer),
-        _spec("move_to_recycle_bin", "把指定文件移动到回收站", RecycleArgs, move_to_recycle_bin, preflight_recycle, True),
-        _spec("preview_organize", "预览按扩展名整理目录的移动计划", OrganizeArgs, preview_organize),
-        _spec("apply_moves", "执行已经预览过的移动计划", ApplyMovesArgs, apply_moves, preflight_apply),
-        _spec("open_file", "用系统关联程序打开一个普通文件", OpenFileArgs, open_file),
-        _spec("launch_app", "打开记事本、计算器、画图或资源管理器", LaunchArgs, launch_app),
-        _spec("list_windows", "列出可见窗口标题", WindowEmpty, list_windows),
-        _spec("get_active_window", "读取前台窗口标题", WindowEmpty, get_active_window),
-        _spec("focus_window", "尝试把标题匹配的窗口放到前台", WindowTitleArgs, focus_window),
-        _spec("close_application", "向匹配窗口发送关闭消息", WindowTitleArgs, close_application, granted=True),
-        _spec("move_mouse", "移动鼠标到校验过的坐标", PointArgs, move_mouse, granted=True),
-        _spec("click", "在校验过的坐标单击", ClickArgs, click, granted=True),
-        _spec("click_named", "把鼠标移到名称匹配的可见控件并单击", NamedClickArgs, click_named, preflight_named_click, True),
-        _spec("double_click", "在校验过的坐标双击", ClickArgs, double_click, granted=True),
-        _spec("right_click", "在校验过的坐标右击", PointArgs, right_click, granted=True),
-        _spec("scroll", "在允许范围内滚动滚轮", ScrollArgs, scroll, granted=True),
-        _spec("type_text", "向已经核对的窗口输入文本", TypeArgs, type_text, granted=True),
-        _spec("press_key", "按下允许列表中的一个键", KeyArgs, press_key, granted=True),
-        _spec("hotkey", "按下最多三个允许的组合键", HotkeyArgs, hotkey, granted=True),
-        _spec("drag_and_drop", "在屏幕范围内拖拽", DragArgs, drag_and_drop, granted=True),
-        _spec("get_mouse_position", "读取当前鼠标坐标", MouseEmpty, get_mouse_position),
-        _spec("capture_screen", "把屏幕保存到本地数据目录", CaptureArgs, capture_screen, granted=True),
-        _spec("read_ui_tree", "读取当前窗口的辅助功能控件", ScreenEmpty, read_ui_tree),
-        _spec("analyze_screen", "在获得授权时用视觉模型描述屏幕，否则只用辅助功能树", AnalyzeArgs, analyze_screen, granted=True),
-        _spec("set_wallpaper", "更换当前用户的桌面壁纸", WallpaperArgs, set_wallpaper, preflight_wallpaper, True),
-        _spec("get_wallpaper", "读取当前壁纸路径", SettingsEmpty, get_wallpaper),
-        _spec("set_appearance", "切换当前用户的浅色或深色外观", AppearanceArgs, set_appearance, preflight_appearance, True),
-        _spec("get_appearance", "读取当前浅色或深色外观", SettingsEmpty, get_appearance),
-        _spec("open_settings", "打开一个允许的 Windows 设置页面", SettingsArgs, open_settings),
-        _spec("open_url", "用默认浏览器打开一个 http 或 https 网址", UrlArgs, open_url, granted=True),
-        _spec("open_browser", "用 Chrome 或 Edge 打开一个 http 或 https 网址", UrlArgs, open_browser, preflight_browser, True),
-        _spec("read_page_title", "在可用时只读取网页标题", UrlArgs, read_page_title, granted=True),
+        _spec("find_files", "Search allowed folders by name, extension, size, and modification time", FindFilesArgs, find_files),
+        _spec("list_directory", "List the immediate contents of an allowed folder", ListDirectoryArgs, list_directory),
+        _spec("get_file_metadata", "Read file size and modification time", MetadataArgs, get_file_metadata),
+        _spec("calculate_file_hash", "Calculate the SHA-256 of an ordinary file", HashArgs, calculate_file_hash),
+        _spec("find_duplicates", "Find files with identical contents in one folder, without deleting", DuplicateArgs, find_duplicates),
+        _spec("create_directory", "Create a directory inside the allowed scope", CreateDirectoryArgs, create_directory),
+        _spec("create_text_file", "Write a text file", CreateTextArgs, create_text_file, preflight_text),
+        _spec("create_spreadsheet", "Create an xlsx spreadsheet", SpreadsheetArgs, create_spreadsheet, preflight_spreadsheet),
+        _spec("rename_file", "Rename a file", RenameArgs, rename_file, preflight_rename),
+        _spec("copy_files", "Copy files into an allowed folder", TransferArgs, copy_files, preflight_transfer),
+        _spec("move_files", "Move files into an allowed folder", TransferArgs, move_files, preflight_transfer),
+        _spec("move_to_recycle_bin", "Move the specified files to the Recycle Bin", RecycleArgs, move_to_recycle_bin, preflight_recycle, True),
+        _spec("preview_organize", "Preview a plan that organizes a folder by extension", OrganizeArgs, preview_organize),
+        _spec("apply_moves", "Apply a move plan that was already previewed", ApplyMovesArgs, apply_moves, preflight_apply),
+        _spec("open_file", "Open an ordinary file with its associated program", OpenFileArgs, open_file),
+        _spec("launch_app", "Open Notepad, Calculator, Paint, or File Explorer", LaunchArgs, launch_app),
+        _spec("list_windows", "List visible window titles", WindowEmpty, list_windows),
+        _spec("get_active_window", "Read the foreground window title", WindowEmpty, get_active_window),
+        _spec("focus_window", "Try to bring the window with a matching title to the foreground", WindowTitleArgs, focus_window),
+        _spec("close_application", "Send a close message to the matching window", WindowTitleArgs, close_application, granted=True),
+        _spec("move_mouse", "Move the mouse to a checked coordinate", PointArgs, move_mouse, granted=True),
+        _spec("click", "Click a checked coordinate", ClickArgs, click, granted=True),
+        _spec("click_named", "Move the mouse to a visible control with a matching name and click", NamedClickArgs, click_named, preflight_named_click, True),
+        _spec("double_click", "Double-click a checked coordinate", ClickArgs, double_click, granted=True),
+        _spec("right_click", "Right-click a checked coordinate", PointArgs, right_click, granted=True),
+        _spec("scroll", "Scroll within the allowed range", ScrollArgs, scroll, granted=True),
+        _spec("type_text", "Type text into a window that has been checked", TypeArgs, type_text, granted=True),
+        _spec("press_key", "Press one allow-listed key", KeyArgs, press_key, granted=True),
+        _spec("hotkey", "Press up to three allow-listed shortcut keys", HotkeyArgs, hotkey, granted=True),
+        _spec("drag_and_drop", "Drag within the screen", DragArgs, drag_and_drop, granted=True),
+        _spec("get_mouse_position", "Read the current mouse coordinate", MouseEmpty, get_mouse_position),
+        _spec("capture_screen", "Save the screen into the local data directory", CaptureArgs, capture_screen, granted=True),
+        _spec("read_ui_tree", "Read the accessibility controls of the current window", ScreenEmpty, read_ui_tree),
+        _spec(
+            "analyze_screen",
+            "Describe the screen with a vision model when authorized; otherwise use only the accessibility tree",
+            AnalyzeArgs,
+            analyze_screen,
+            granted=True,
+        ),
+        _spec("set_wallpaper", "Change the current user's desktop wallpaper", WallpaperArgs, set_wallpaper, preflight_wallpaper, True),
+        _spec("get_wallpaper", "Read the current wallpaper path", SettingsEmpty, get_wallpaper),
+        _spec("set_appearance", "Switch the current user's light or dark appearance", AppearanceArgs, set_appearance, preflight_appearance, True),
+        _spec("get_appearance", "Read the current light or dark appearance", SettingsEmpty, get_appearance),
+        _spec("open_settings", "Open an allow-listed Windows Settings page", SettingsArgs, open_settings),
+        _spec("open_url", "Open an http or https address in the default browser", UrlArgs, open_url, granted=True),
+        _spec("open_browser", "Open an http or https address in Chrome or Edge", UrlArgs, open_browser, preflight_browser, True),
+        _spec("read_page_title", "Read only the page title when that is available", UrlArgs, read_page_title, granted=True),
     ]
     for spec in specs:
         registry.add(spec)

@@ -14,14 +14,14 @@ class FakePlatform:
         self.launched: list[tuple[str, list[str]]] = []
         self.clicks: list[tuple] = []
         self.typed: list[tuple] = []
-        self.titles = ["测试窗口"]
-        self.foreground = "测试窗口"
+        self.titles = ["Test window"]
+        self.foreground = "Test window"
         self.appearance = "light"
         self.fail_trash = False
         self._wallpaper = ""
         self.controls = [
             {
-                "name": "登录",
+                "name": "Sign in",
                 "control_type": "Hyperlink",
                 "is_password": False,
                 "rect": (400, 120, 480, 160),
@@ -54,7 +54,7 @@ class FakePlatform:
         del cancel_event, deadline
         if pick == "first_video":
             self.click(640, 420)
-            return {"ok": True, "x": 640, "y": 420, "name": "第一个视频", "error": None, "error_code": None}
+            return {"ok": True, "x": 640, "y": 420, "name": "first video", "error": None, "error_code": None}
         alternatives = [part.strip().lower() for part in name.split("|") if part.strip()]
         for control in self.controls:
             if control.get("is_password"):
@@ -74,7 +74,7 @@ class FakePlatform:
             "x": None,
             "y": None,
             "name": "",
-            "error": "没有在窗口里找到可点击的控件",
+            "error": "No clickable control was found in the window",
             "error_code": "window_not_ready",
         }
 
@@ -149,7 +149,7 @@ class FakePlatform:
             "available": True,
             "dialogs": [],
             "elements": [
-                {"name": "保存", "control_type": "Button", "automation_id": "save", "is_password": False},
+                {"name": "Save", "control_type": "Button", "automation_id": "save", "is_password": False},
                 {"name": "super-secret", "control_type": "Edit", "automation_id": "password", "is_password": True},
             ],
         }
@@ -173,7 +173,7 @@ class FakePlatform:
 
     def open_settings(self, uri: str) -> None:
         self.opened.append(uri)
-        self.titles.append("设置")
+        self.titles.append("Settings")
 
     def read_page_title(self, url: str, _cancel_event) -> str:
         self.opened.append(url)

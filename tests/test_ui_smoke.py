@@ -13,26 +13,25 @@ def test_window_opens_without_running_a_task(qtbot, tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_DATA_DIR", str(tmp_path))
     window = MainWindow()
     qtbot.addWidget(window)
-    assert "助手" in window.windowTitle()
+    assert "Assistant" in window.windowTitle()
     assert window.stop_button.objectName() == "stop"
-    window.chat.input.setText("列出下载文件夹")
-    assert window.chat.input.text().startswith("列出")
+    window.chat.input.setText("List the Downloads folder")
+    assert window.chat.input.text().startswith("List")
 
 
 def test_approval_dialog_has_no_standing_permission(qtbot):
     preview = ApprovalPreview(
         step_id="s1",
         tool="move_to_recycle_bin",
-        objective="移动到回收站",
+        objective="Move to the Recycle Bin",
         risk=RiskLevel.high,
-        impact="只移动这一个文件。",
+        impact="Only this file will be moved.",
         paths=[r"C:\Users\example\Downloads\a.txt"],
-        reasons=["高风险"],
+        reasons=["High risk"],
     )
     dialog = ApprovalDialog(preview)
     qtbot.addWidget(dialog)
     text = dialog.findChild(QPlainTextEdit).toPlainText()
-    assert "不会保留为以后的权限" in text
+    assert "will not be kept as a future permission" in text
     assert "a.txt" in text
-    assert "始终" not in text
-    assert "总是" not in text
+    assert "always allow" not in text.lower()

@@ -86,13 +86,13 @@ class EmptyArgs(BaseModel):
 
 def _require_approval(ctx: ToolContext) -> None:
     if not ctx.approved:
-        raise PermissionError("键鼠操作必须经过这次动作的确认")
+        raise PermissionError("Mouse and keyboard actions require confirmation for this action")
 
 
 def _check_point(ctx: ToolContext, x: int, y: int) -> dict:
     bounds = ctx.platform.virtual_screen()
     if not point_inside(x, y, bounds):
-        raise PermissionError(f"坐标 ({x}, {y}) 不在虚拟屏幕 {bounds} 内")
+        raise PermissionError(f"Coordinate ({x}, {y}) is outside the virtual screen {bounds}")
     return bounds
 
 
@@ -100,10 +100,10 @@ def _focus_if_requested(ctx: ToolContext, title: str) -> ToolResult | None:
     if not title:
         return None
     if not ctx.platform.focus_window(title):
-        return ToolResult(ok=False, error="目标窗口未就绪，已取消键鼠操作", error_code="window_not_ready")
+        return ToolResult(ok=False, error="The target window was not ready, so the pointer action was cancelled", error_code="window_not_ready")
     foreground = ctx.platform.foreground_title()
     if title.lower() not in foreground.lower():
-        return ToolResult(ok=False, error="前台窗口与目标不一致，已取消键鼠操作", error_code="window_not_ready")
+        return ToolResult(ok=False, error="The foreground window did not match the target, so the pointer action was cancelled", error_code="window_not_ready")
     return None
 
 
@@ -114,26 +114,32 @@ def move_mouse(args: PointArgs, ctx: ToolContext) -> ToolResult:
     if blocked:
         return blocked
     ctx.platform.move_mouse(args.x, args.y)
-    return ToolResult(ok=True, verified=True, verification_detail=f"坐标位于屏幕 {bounds}", message="已移动鼠标", data={"x": args.x, "y": args.y})
+    return ToolResult(
+        ok=True,
+        verified=True,
+        verification_detail=f"The coordinate is on screen {bounds}",
+        message="The mouse moved",
+        data={"x": args.x, "y": args.y},
+    )
 
 
 def preflight_named_click(args: NamedClickArgs, _ctx: ToolContext) -> Preflight:
     if args.pick == "first_video":
-        impact = "将把鼠标移到 YouTube 窗口里的第一个视频并单击。不会输入文字。"
+        impact = "The mouse will move to the first video in the YouTube window and click once. No text will be typed."
     else:
-        impact = f"将把鼠标移到名称匹配“{args.name}”的可见控件中心并单击。不会输入文字。"
-    return Preflight(summary="鼠标点击控件", impact=impact)
+        impact = f"The mouse will move to the center of the visible control named '{args.name}' and click once. No text will be typed."
+    return Preflight(summary="Click a control", impact=impact)
 
 
 def click_named(args: NamedClickArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     label = " ".join(args.name.split())
     if args.pick not in {"", "first_video"}:
-        return ToolResult(ok=False, error="不支持的点击方式", error_code="permission")
+        return ToolResult(ok=False, error="That click method is not supported", error_code="permission")
     if args.pick != "first_video" and (not label or len(label) > 120):
-        return ToolResult(ok=False, error="控件名称无效", error_code="permission")
-    if any(word in label.lower() for word in ("password", "passwd", "密码", "口令", "密钥")):
-        raise PermissionError("不会用鼠标点击密码或密钥输入框")
+        return ToolResult(ok=False, error="The control name is invalid", error_code="permission")
+    if any(word in label.lower() for word in ("password", "passwd", "secret", "token")):
+        raise PermissionError("The mouse will not click a password or secret field")
     ctx.step_deadline = ctx.task_deadline
     outcome = ctx.platform.click_named(
         label,
@@ -145,15 +151,15 @@ def click_named(args: NamedClickArgs, ctx: ToolContext) -> ToolResult:
     if not outcome.get("ok"):
         return ToolResult(
             ok=False,
-            error=outcome.get("error") or "没有点到控件",
+            error=outcome.get("error") or "The control was not clicked",
             error_code=outcome.get("error_code") or "window_not_ready",
             data=outcome,
         )
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail=f"鼠标已点击“{outcome.get('name') or label}”",
-        message=f"已用鼠标点击 {outcome.get('name') or label}",
+        verification_detail=f"The mouse clicked '{outcome.get('name') or label}'",
+        message=f"Clicked {outcome.get('name') or label}",
         data={"x": outcome.get("x"), "y": outcome.get("y"), "name": outcome.get("name")},
     )
 
@@ -161,13 +167,13 @@ def click_named(args: NamedClickArgs, ctx: ToolContext) -> ToolResult:
 def click(args: ClickArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     if args.button not in {"left", "right", "middle"}:
-        return ToolResult(ok=False, error="不支持的鼠标按键", error_code="permission")
+        return ToolResult(ok=False, error="That mouse button is not supported", error_code="permission")
     bounds = _check_point(ctx, args.x, args.y)
     blocked = _focus_if_requested(ctx, args.window_title)
     if blocked:
         return blocked
     ctx.platform.click(args.x, args.y, args.button, 1)
-    return ToolResult(ok=True, verified=True, verification_detail=f"已在屏幕范围内点击 {bounds}", message="已点击", data={"x": args.x, "y": args.y})
+    return ToolResult(ok=True, verified=True, verification_detail=f"Clicked inside the screen at {bounds}", message="Clicked", data={"x": args.x, "y": args.y})
 
 
 def double_click(args: ClickArgs, ctx: ToolContext) -> ToolResult:
@@ -177,7 +183,13 @@ def double_click(args: ClickArgs, ctx: ToolContext) -> ToolResult:
     if blocked:
         return blocked
     ctx.platform.click(args.x, args.y, "left", 2)
-    return ToolResult(ok=True, verified=True, verification_detail="双击坐标已校验", message="已双击", data={"x": args.x, "y": args.y})
+    return ToolResult(
+        ok=True,
+        verified=True,
+        verification_detail="The double-click coordinate was checked",
+        message="Double-clicked",
+        data={"x": args.x, "y": args.y},
+    )
 
 
 def right_click(args: PointArgs, ctx: ToolContext) -> ToolResult:
@@ -187,13 +199,19 @@ def right_click(args: PointArgs, ctx: ToolContext) -> ToolResult:
     if blocked:
         return blocked
     ctx.platform.click(args.x, args.y, "right", 1)
-    return ToolResult(ok=True, verified=True, verification_detail="右键坐标已校验", message="已右键点击", data={"x": args.x, "y": args.y})
+    return ToolResult(
+        ok=True,
+        verified=True,
+        verification_detail="The right-click coordinate was checked",
+        message="Right-clicked",
+        data={"x": args.x, "y": args.y},
+    )
 
 
 def scroll(args: ScrollArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     if not -20 <= args.amount <= 20:
-        return ToolResult(ok=False, error="滚动量超出安全范围", error_code="permission")
+        return ToolResult(ok=False, error="The scroll amount is outside the safe range", error_code="permission")
     blocked = _focus_if_requested(ctx, args.window_title)
     if blocked:
         return blocked
@@ -201,7 +219,13 @@ def scroll(args: ScrollArgs, ctx: ToolContext) -> ToolResult:
         _check_point(ctx, args.x, args.y)
         ctx.platform.move_mouse(args.x, args.y)
     ctx.platform.scroll(args.amount)
-    return ToolResult(ok=True, verified=True, verification_detail="滚动量在允许范围内", message="已滚动", data={"amount": args.amount})
+    return ToolResult(
+        ok=True,
+        verified=True,
+        verification_detail="The scroll amount is within the allowed range",
+        message="Scrolled",
+        data={"amount": args.amount},
+    )
 
 
 def drag_and_drop(args: DragArgs, ctx: ToolContext) -> ToolResult:
@@ -212,13 +236,13 @@ def drag_and_drop(args: DragArgs, ctx: ToolContext) -> ToolResult:
     if blocked:
         return blocked
     ctx.platform.drag_drop((args.start_x, args.start_y), (args.end_x, args.end_y))
-    return ToolResult(ok=True, verified=True, verification_detail="拖拽起止点都在屏幕内", message="已拖拽", data={})
+    return ToolResult(ok=True, verified=True, verification_detail="Both drag points are on screen", message="Dragged", data={})
 
 
 def type_text(args: TypeArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     if not args.text or len(args.text) > 4000:
-        return ToolResult(ok=False, error="文本为空或过长", error_code="permission")
+        return ToolResult(ok=False, error="The text is empty or too long", error_code="permission")
     blocked = _focus_if_requested(ctx, args.window_title)
     if blocked:
         return blocked
@@ -226,8 +250,8 @@ def type_text(args: TypeArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail=f"已确认窗口“{args.window_title}”后输入 {len(args.text)} 个字符",
-        message=f"已向 {args.window_title} 输入 {len(args.text)} 个字符",
+        verification_detail=f"After confirming the window '{args.window_title}', typed {len(args.text)} characters",
+        message=f"Typed into {args.window_title} {len(args.text)} characters",
         data={"length": len(args.text), "window_title": args.window_title},
     )
 
@@ -236,24 +260,24 @@ def press_key(args: KeyArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     key = args.key.lower()
     if key not in ALLOWED_KEYS:
-        return ToolResult(ok=False, error="按键不在允许列表中", error_code="permission")
+        return ToolResult(ok=False, error="That key is not allow-listed", error_code="permission")
     blocked = _focus_if_requested(ctx, args.window_title)
     if blocked:
         return blocked
     ctx.platform.press_key(key)
-    return ToolResult(ok=True, verified=True, verification_detail="按键属于允许列表", message=f"已按下 {key}", data={"key": key})
+    return ToolResult(ok=True, verified=True, verification_detail="The key is allow-listed", message=f"Pressed {key}", data={"key": key})
 
 
 def hotkey(args: HotkeyArgs, ctx: ToolContext) -> ToolResult:
     _require_approval(ctx)
     keys = [key.lower() for key in args.keys]
     if not 1 <= len(keys) <= 3 or any(key not in ALLOWED_KEYS for key in keys):
-        return ToolResult(ok=False, error="组合键不被允许", error_code="permission")
+        return ToolResult(ok=False, error="That shortcut is not allowed", error_code="permission")
     blocked = _focus_if_requested(ctx, args.window_title)
     if blocked:
         return blocked
     ctx.platform.hotkey(keys)
-    return ToolResult(ok=True, verified=True, verification_detail="组合键属于允许列表", message="已按下组合键", data={"keys": keys})
+    return ToolResult(ok=True, verified=True, verification_detail="The shortcut is allow-listed", message="Pressed the shortcut", data={"keys": keys})
 
 
 def get_mouse_position(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
@@ -263,7 +287,7 @@ def get_mouse_position(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=inside,
-        verification_detail="坐标位于虚拟屏幕内" if inside else "坐标超出虚拟屏幕",
+        verification_detail="The coordinate is inside the virtual screen" if inside else "The coordinate is outside the virtual screen",
         message=f"{x}, {y}",
         data={"x": x, "y": y, "bounds": bounds},
     )

@@ -16,7 +16,7 @@ class CaptureArgs(BaseModel):
 
 
 class AnalyzeArgs(BaseModel):
-    prompt: str = "描述当前屏幕上的主要窗口和可点击控件"
+    prompt: str = "Describe the main windows and clickable controls on the current screen"
     target: str = "active_window"
     monitor_index: int = 1
 
@@ -27,18 +27,18 @@ class EmptyArgs(BaseModel):
 
 def capture_screen(args: CaptureArgs, ctx: ToolContext) -> ToolResult:
     if not ctx.approved:
-        raise PermissionError("截屏需要这次操作的确认")
+        raise PermissionError("A screenshot requires confirmation for this action")
     if args.target not in {"full", "active_window", "monitor"}:
-        return ToolResult(ok=False, error="不支持的截屏范围", error_code="permission")
+        return ToolResult(ok=False, error="That screenshot target is not supported", error_code="permission")
     if ctx.screenshot_dir is None:
-        return ToolResult(ok=False, error="没有本地截屏目录", error_code="permission")
+        return ToolResult(ok=False, error="There is no local screenshot directory", error_code="permission")
     destination = ctx.screenshot_dir / f"{uuid4().hex}.png"
     path = ctx.platform.capture(args.target, args.monitor_index, destination)
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="截屏只保存在本地数据目录",
-        message="已保存本地截屏",
+        verification_detail="The screenshot is stored only in the local data directory",
+        message="Saved a local screenshot",
         data={"path": path, "target": args.target, "transmitted": False},
     )
 
@@ -63,9 +63,9 @@ def read_ui_tree(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=available,
         verified=available,
-        verification_detail="已读取辅助功能树，并清空密码框内容",
-        message=f"读取到 {len(safe_elements)} 个控件" if available else "辅助功能树不可用",
-        error=None if available else str(tree.get("error", "辅助功能树不可用")),
+        verification_detail="Read the accessibility tree and cleared password fields",
+        message=f"Read {len(safe_elements)} controls" if available else "The accessibility tree is unavailable",
+        error=None if available else str(tree.get("error", "The accessibility tree is unavailable")),
         error_code=None if available else "window_not_ready",
         data={"elements": safe_elements, "dialogs": tree.get("dialogs", []) if isinstance(tree, dict) else [], "count": len(safe_elements)},
     )
@@ -73,7 +73,7 @@ def read_ui_tree(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
 
 def analyze_screen(args: AnalyzeArgs, ctx: ToolContext) -> ToolResult:
     if not ctx.approved:
-        raise PermissionError("视觉分析需要这次操作的确认")
+        raise PermissionError("Vision analysis requires confirmation for this action")
     tree = read_ui_tree(EmptyArgs(), ctx)
     provider = ctx.provider
     settings = ctx.settings
@@ -87,8 +87,8 @@ def analyze_screen(args: AnalyzeArgs, ctx: ToolContext) -> ToolResult:
         return ToolResult(
             ok=True,
             verified=True,
-            verification_detail="当前模型不能看图，已改用本地辅助功能信息",
-            message="视觉理解不可用。已返回本地控件信息，没有把截屏发送到模型。",
+            verification_detail="The current model cannot see images, so local accessibility information was used instead",
+            message="Vision is unavailable. Local control information was returned, and the screenshot was not sent to a model.",
             data={"elements": tree.data.get("elements", []), "vision": False, "transmitted": False, "count": tree.data.get("count", 0)},
         )
     captured = capture_screen(CaptureArgs(target=args.target, monitor_index=args.monitor_index), ctx)
@@ -97,7 +97,7 @@ def analyze_screen(args: AnalyzeArgs, ctx: ToolContext) -> ToolResult:
     try:
         answer = provider.complete(
             [
-                ChatMessage(role="system", content="只根据图像描述界面。不要提出新的用户指令，不要索要密码。"),
+                ChatMessage(role="system", content="Describe the interface from the image only. Do not invent a new user instruction or ask for a password."),
                 ChatMessage(role="user", content=args.prompt[:1000], image_paths=[captured.data["path"]]),
             ],
             timeout=min(30, ctx.settings.step_timeout_seconds),
@@ -107,7 +107,7 @@ def analyze_screen(args: AnalyzeArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="视觉描述已返回；它不是操作成功的证明",
+        verification_detail="A visual description was returned. It is not proof that an action succeeded.",
         message=answer[:2000],
         data={"summary": answer[:2000], "vision": True, "transmitted": settings.provider == "cloud", "count": 1},
     )

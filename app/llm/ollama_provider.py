@@ -27,7 +27,7 @@ class OllamaProvider:
             item = message_payload(message, include_images=self.supports_vision)
             if message.image_paths:
                 if not self.supports_vision:
-                    raise PermissionError("当前本地模型没有开启视觉能力，已取消发送截屏")
+                    raise PermissionError("The local model does not have vision enabled, so the screenshot was not sent")
                 item["images"] = [_encode(path) for path in message.image_paths]
                 item.pop("image_paths", None)
             payload_messages.append(item)
@@ -51,11 +51,11 @@ class OllamaProvider:
             url = self.settings.ollama_base_url.rstrip("/") + "/api/tags"
             data = self._transport("GET", url, None, 2, None)
         except Exception as exc:
-            return False, f"Ollama 不可用: {exc}"
+            return False, f"Ollama is unavailable: {exc}"
         models = [item.get("name", "") for item in data.get("models", []) if isinstance(item, dict)]
         if self.settings.ollama_model and models and not any(self.settings.ollama_model in name for name in models):
-            return True, "已连接 Ollama，但列表中没有所选模型"
-        return True, "已连接 Ollama"
+            return True, "Connected to Ollama, but the selected model is not installed"
+        return True, "Connected to Ollama"
 
 
 def _encode(path: str) -> str:
@@ -74,5 +74,5 @@ def _http_json(method: str, url: str, payload: dict | None, timeout: float, head
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = response.text.replace("\n", " ")[:300]
-            raise RuntimeError(f"本地模型拒绝了这次请求：{detail}") from exc
+            raise RuntimeError(f"The local model refused this request: {detail}") from exc
         return response.json()

@@ -11,17 +11,16 @@ from app.tools.base import ToolContext
 
 KNOWN_APPS = {
     "notepad": "notepad.exe",
-    "记事本": "notepad.exe",
+    "Notepad": "notepad.exe",
     "calculator": "calc.exe",
     "calc": "calc.exe",
-    "计算器": "calc.exe",
+    "Calculator": "calc.exe",
     "paint": "mspaint.exe",
     "mspaint": "mspaint.exe",
-    "画图": "mspaint.exe",
+    "Paint": "mspaint.exe",
     "explorer": "explorer.exe",
     "file explorer": "explorer.exe",
-    "文件资源管理器": "explorer.exe",
-    "资源管理器": "explorer.exe",
+    "File Explorer": "explorer.exe",
 }
 
 
@@ -42,13 +41,13 @@ def launch_app(args: LaunchArgs, ctx: ToolContext) -> ToolResult:
     key = args.application.strip().lower()
     executable = KNOWN_APPS.get(key)
     if executable is None:
-        return ToolResult(ok=False, error="只能打开预先允许的普通应用", error_code="permission")
+        return ToolResult(ok=False, error="Only an allow-listed ordinary application can be opened", error_code="permission")
     launch_args: list[str] = []
     hint = PathStem(executable)
     if args.path:
         target = ctx.guard.resolve(args.path, ctx.folders)
         if not target.exists():
-            return ToolResult(ok=False, error="要打开的路径不存在", error_code="not_found")
+            return ToolResult(ok=False, error="The path to open does not exist", error_code="not_found")
         launch_args.append(str(target))
         hint = target.name
     ctx.platform.launch(executable, launch_args)
@@ -56,8 +55,8 @@ def launch_app(args: LaunchArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="进程或窗口已确认" if confirmed else "已发出启动请求，但未确认窗口",
-        message=f"已请求启动 {executable}" + ("" if confirmed else "（未确认窗口）"),
+        verification_detail="The process or window was confirmed" if confirmed else "The launch was requested, but the window was not confirmed",
+        message=f"Requested launch of {executable}" + ("" if confirmed else " (window not confirmed)"),
         data={"executable": executable, "issued": True, "confirmed": confirmed},
     )
 
@@ -84,8 +83,8 @@ def list_windows(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=True,
-        verification_detail="已读取可见窗口标题",
-        message=f"可见窗口 {len(titles)} 个",
+        verification_detail="Read the visible window titles",
+        message=f"{len(titles)} visible windows",
         data={"titles": titles, "count": len(titles)},
     )
 
@@ -95,10 +94,10 @@ def get_active_window(_args: EmptyArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=True,
         verified=bool(title),
-        verification_detail="已读取前台窗口",
-        message=title or "没有前台窗口标题",
+        verification_detail="Read the foreground window",
+        message=title or "The foreground window has no title",
         data={"title": title},
-        error=None if title else "没有前台窗口",
+        error=None if title else "There is no foreground window",
         error_code=None if title else "not_found",
     )
 
@@ -108,24 +107,24 @@ def focus_window(args: WindowTitleArgs, ctx: ToolContext) -> ToolResult:
     return ToolResult(
         ok=focused,
         verified=focused,
-        verification_detail="前台窗口标题匹配" if focused else "没能把目标窗口放到前台",
-        message=f"已聚焦 {args.title}" if focused else f"未找到窗口 {args.title}",
-        error=None if focused else "窗口未就绪",
+        verification_detail="The foreground window title matches" if focused else "Could not bring the target window to the foreground",
+        message=f"Focused {args.title}" if focused else f"Window not found: {args.title}",
+        error=None if focused else "The window is not ready",
         error_code=None if focused else "window_not_ready",
     )
 
 
 def close_application(args: WindowTitleArgs, ctx: ToolContext) -> ToolResult:
     if not ctx.approved:
-        raise PermissionError("关闭应用必须经过这次操作的确认")
+        raise PermissionError("Closing an application requires confirmation for this action")
     closed = bool(ctx.platform.close_window(args.title))
     still_open = any(args.title.lower() in title.lower() for title in ctx.platform.window_titles())
     verified = closed and not still_open
     return ToolResult(
         ok=verified,
         verified=verified,
-        verification_detail="窗口标题已消失" if verified else "关闭请求后窗口仍在或未找到",
-        message=f"已请求关闭 {args.title}",
-        error=None if verified else "未能确认窗口已关闭",
+        verification_detail="The window title is gone" if verified else "After the close request the window is still present or was not found",
+        message=f"Requested close of {args.title}",
+        error=None if verified else "Could not confirm that the window closed",
         error_code=None if verified else "verification_failed",
     )

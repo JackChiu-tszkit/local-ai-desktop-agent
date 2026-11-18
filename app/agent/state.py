@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 STATUS_LABELS = {
-    "completed": "已完成",
-    "completed_with_warnings": "已完成，但有窗口未确认",
-    "failed": "未完成",
-    "needs_clarification": "需要补充说明",
-    "cancelled": "已停止",
-    "running": "进行中",
+    "completed": "Completed",
+    "completed_with_warnings": "Completed, with an unconfirmed window",
+    "failed": "Not completed",
+    "needs_clarification": "Needs more detail",
+    "cancelled": "Stopped",
+    "running": "Running",
 }
 
 STEP_LABELS = {
-    "pending": "等待",
-    "awaiting_approval": "等待确认",
-    "running": "执行中",
-    "succeeded": "已核对",
-    "failed": "失败",
-    "warning": "已执行但未确认窗口",
-    "skipped": "跳过",
-    "cancelled": "已停止",
+    "pending": "Waiting",
+    "awaiting_approval": "Waiting for confirmation",
+    "running": "Running",
+    "succeeded": "Verified",
+    "failed": "Failed",
+    "warning": "Ran, but the window was not confirmed",
+    "skipped": "Skipped",
+    "cancelled": "Stopped",
 }
 
 
@@ -49,27 +49,27 @@ def render_report(
     clarification: str | None = None,
     error: str | None = None,
 ) -> str:
-    lines = [f"任务状态：{STATUS_LABELS.get(status, status)}", ""]
+    lines = [f"Status: {STATUS_LABELS.get(status, status)}", ""]
     if clarification:
         lines.extend([clarification, ""])
     if status == "needs_clarification" and not steps:
-        return clarification or "请把目标说得更具体。"
+        return clarification or "Please describe the goal more specifically."
     if assumptions:
-        lines.append("执行前的假设：")
+        lines.append("Assumptions:")
         lines.extend(f"- {item}" for item in assumptions)
         lines.append("")
     if not steps:
-        lines.append("没有执行任何操作。")
+        lines.append("No actions were run.")
     else:
-        lines.append("执行记录：")
+        lines.append("Steps:")
         for index, step in enumerate(steps, start=1):
             label = STEP_LABELS.get(str(step.get("status")), str(step.get("status")))
             lines.append(f"{index}. [{label}] {step.get('objective', '')}")
             if step.get("actual_result"):
-                lines.append(f"   结果：{step['actual_result']}")
+                lines.append(f"   Result: {step['actual_result']}")
             if step.get("error"):
-                lines.append(f"   错误：{step['error']}")
+                lines.append(f"   Error: {step['error']}")
     if error and error not in "\n".join(lines):
         lines.extend(["", error])
-    lines.extend(["", f"原始指令：{instruction}"])
+    lines.extend(["", f"Original instruction: {instruction}"])
     return "\n".join(lines).strip()

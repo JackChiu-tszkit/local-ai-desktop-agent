@@ -36,20 +36,23 @@ class ChatPanel(QWidget):
         layout.addLayout(examples)
         row = QHBoxLayout()
         self.input = QLineEdit()
-        self.input.setPlaceholderText("用中文或英文描述你想完成的结果")
+        self.input.setPlaceholderText("Describe the result you want")
         self.input.returnPressed.connect(self._emit)
-        self.send_button = QPushButton("发送")
+        self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self._emit)
         row.addWidget(self.input, 1)
         row.addWidget(self.send_button)
         layout.addLayout(row)
-        self.append_agent("描述结果即可。文件搜索会走文件系统；删除只会进入回收站，并且每次都要单独确认。")
+        self.append_agent(
+            "Describe the result. File search uses the filesystem. "
+            "Deletion only moves items to the Recycle Bin, and each one needs its own confirmation."
+        )
 
     def append_user(self, text: str) -> None:
-        self._append("你", text)
+        self._append("You", text)
 
     def append_agent(self, text: str) -> None:
-        self._append("助手", text)
+        self._append("Assistant", text)
 
     def set_busy(self, busy: bool) -> None:
         self.input.setEnabled(not busy)

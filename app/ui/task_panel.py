@@ -17,8 +17,8 @@ class TaskPanel(QWidget):
         self.tabs = QTabWidget()
         self.steps = QListWidget()
         self.history = QListWidget()
-        self.tabs.addTab(self.steps, "当前步骤")
-        self.tabs.addTab(self.history, "历史")
+        self.tabs.addTab(self.steps, "Current steps")
+        self.tabs.addTab(self.history, "History")
         layout.addWidget(self.tabs)
         self.history.itemClicked.connect(self._clicked)
         self._rows: dict[str, QListWidgetItem] = {}

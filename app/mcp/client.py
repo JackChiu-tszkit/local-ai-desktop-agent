@@ -29,9 +29,9 @@ class MCPClient:
 
     def start(self) -> None:
         if not self.config.enabled:
-            raise PermissionError("MCP 服务器未启用")
+            raise PermissionError("The MCP server is not enabled")
         if not self.config.command:
-            raise PermissionError("MCP 命令为空")
+            raise PermissionError("The MCP command is empty")
         self.proc = subprocess.Popen(
             [self.config.command, *self.config.args],
             stdin=subprocess.PIPE,
@@ -80,11 +80,11 @@ class MCPClient:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError(f"MCP 调用超时: {method}")
+                raise TimeoutError(f"The MCP call timed out: {method}")
             try:
                 item = self._queue.get(timeout=remaining)
             except Empty as exc:
-                raise TimeoutError(f"MCP 调用超时: {method}") from exc
+                raise TimeoutError(f"The MCP call timed out: {method}") from exc
             if isinstance(item, Exception):
                 raise item
             if item.get("id") != ident:
@@ -95,7 +95,7 @@ class MCPClient:
 
     def _send(self, payload: dict) -> None:
         if self.proc is None or self.proc.stdin is None:
-            raise RuntimeError("MCP 服务器没有启动")
+            raise RuntimeError("The MCP server did not start")
         body = json.dumps(payload).encode("utf-8")
         header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
         self.proc.stdin.write(header + body)
@@ -121,17 +121,17 @@ class MCPClient:
                 return None
             header += chunk
             if len(header) > 65536:
-                raise RuntimeError("MCP 头部过长")
+                raise RuntimeError("The MCP header is too long")
         length = None
         for line in header.split(b"\r\n\r\n", 1)[0].split(b"\r\n"):
             if line.lower().startswith(b"content-length:"):
                 length = int(line.split(b":", 1)[1].strip())
         if length is None:
-            raise RuntimeError("MCP 响应缺少 Content-Length")
+            raise RuntimeError("The MCP response is missing Content-Length")
         body = b""
         while len(body) < length:
             part = self.proc.stdout.read(length - len(body))
             if not part:
-                raise RuntimeError("MCP 响应不完整")
+                raise RuntimeError("The MCP response is incomplete")
             body += part
         return json.loads(body.decode("utf-8"))

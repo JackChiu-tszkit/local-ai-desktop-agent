@@ -42,7 +42,7 @@ class StepExecutor:
         try:
             resolved = resolve_arguments(step.get("arguments", {}), results)
             if not isinstance(resolved, dict):
-                raise AgentError("工具参数无效")
+                raise AgentError("The tool arguments are invalid")
             self._reject_secret_arguments(step["tool"], resolved)
             preflight = None
             try:
@@ -66,7 +66,8 @@ class StepExecutor:
                     reasons=decision.reasons,
                 )
                 if step["tool"] == "type_text":
-                    preview.impact = f"将向窗口“{resolved.get('window_title', '')}”输入以下文本：\n{resolved.get('text', '')}"
+                    title = resolved.get("window_title", "")
+                    preview.impact = f"The following text will be typed into the window '{title}':\n{resolved.get('text', '')}"
                 approved = self.approval.request(preview)
                 self.audit.record(
                     task_id=task_id,
@@ -74,10 +75,10 @@ class StepExecutor:
                     risk=decision.risk.value,
                     target="; ".join(preview.paths) or step["objective"],
                     decision="approved" if approved else "denied",
-                    detail=preview.impact if step["tool"] != "type_text" else f"确认令牌 {preview.token}",
+                    detail=preview.impact if step["tool"] != "type_text" else f"Confirmation token {preview.token}",
                 )
                 if not approved:
-                    result = ToolResult(ok=False, error="已拒绝这次操作，没有进行更改", error_code="denied")
+                    result = ToolResult(ok=False, error="This action was denied and nothing was changed", error_code="denied")
                     step["approval_status"] = "denied"
                     return self._finish(task_id, position, step, result)
                 step["approval_status"] = "approved"
@@ -91,7 +92,7 @@ class StepExecutor:
                     risk=decision.risk.value,
                     target=step.get("objective", ""),
                     decision="desktop",
-                    detail="桌面任务已开始，这一步不再单独确认",
+                    detail="The desktop task has started, so this step is not confirmed separately",
                 )
             else:
                 step["approval_status"] = "not_required"
@@ -113,7 +114,7 @@ class StepExecutor:
             result = ToolResult(ok=False, error=str(exc), error_code="permission")
             return self._finish(task_id, position, step, result)
         except AgentError as exc:
-            code = "not_found" if "没有找到" in str(exc) else "permission"
+            code = "not_found" if "not found" in str(exc) else "permission"
             return self._finish(task_id, position, step, ToolResult(ok=False, error=str(exc), error_code=code))
         except Exception as exc:
             return self._finish(task_id, position, step, ToolResult(ok=False, error=str(exc), error_code="tool_error"))
@@ -141,7 +142,7 @@ class StepExecutor:
         from app.agent.planner import looks_like_secret_request
 
         if looks_like_secret_request(blob):
-            raise PermissionError("已拒绝处理密码或密钥")
+            raise PermissionError("Refused to handle a password or secret")
 
 
 def _jsonable_step(step: dict) -> dict:

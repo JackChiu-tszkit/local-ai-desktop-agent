@@ -24,9 +24,9 @@ class CloudProvider:
 
     def complete(self, messages: list[ChatMessage], *, timeout: float, json_mode: bool = False) -> str:
         if not self.settings.cloud_enabled:
-            raise PermissionError("云端推理未开启")
+            raise PermissionError("Cloud inference is not enabled")
         if not self.api_key:
-            raise PermissionError("未配置云端 API 密钥")
+            raise PermissionError("No cloud API key is configured")
         payload_messages = []
         for message in messages:
             self._reject_private_payload(message)
@@ -56,24 +56,24 @@ class CloudProvider:
 
     def health(self) -> tuple[bool, str]:
         if not self.settings.cloud_enabled:
-            return False, "云端推理未开启"
+            return False, "Cloud inference is not enabled"
         if not self.api_key:
-            return False, "未配置云端 API 密钥"
+            return False, "No cloud API key is configured"
         try:
             url = self.settings.cloud_base_url.rstrip("/") + "/models"
             self._transport("GET", url, None, 3, {"Authorization": f"Bearer {self.api_key}"})
         except Exception as exc:
-            return False, f"云端服务不可用: {exc}"
-        return True, "已连接云端服务"
+            return False, f"The cloud service is unavailable: {exc}"
+        return True, "Connected to the cloud service"
 
     def _reject_private_payload(self, message: ChatMessage) -> None:
         if message.image_paths and not (self.settings.cloud_allow_screenshots and self.settings.cloud_vision):
-            raise PermissionError("已阻止向云端发送屏幕截图")
+            raise PermissionError("Sending a screenshot to the cloud was blocked")
         lowered = message.content.lower()
         if "data:image" in lowered and not self.settings.cloud_allow_screenshots:
-            raise PermissionError("已阻止向云端发送屏幕截图")
+            raise PermissionError("Sending a screenshot to the cloud was blocked")
         if "file_content" in lowered and not self.settings.cloud_allow_file_contents:
-            raise PermissionError("已阻止向云端发送文件内容")
+            raise PermissionError("Sending file contents to the cloud was blocked")
 
 
 def _encode(path: str) -> str:

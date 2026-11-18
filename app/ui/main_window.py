@@ -30,7 +30,7 @@ from app.ui.worker import AgentWorker
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("本地桌面助手")
+        self.setWindowTitle("Local Desktop Assistant")
         self.resize(1180, 760)
         self.settings = AppSettings.load()
         data_dir = self.settings.resolved_data_dir()
@@ -55,17 +55,17 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         header = QHBoxLayout()
         titles = QVBoxLayout()
-        title = QLabel("本地桌面助手")
+        title = QLabel("Local Desktop Assistant")
         title.setObjectName("title")
-        subtitle = QLabel("本地优先。高风险操作每次单独确认，停止按钮会中断后续步骤。")
+        subtitle = QLabel("Local first. Each high-risk action is confirmed once. Stop cancels the remaining steps.")
         subtitle.setObjectName("subtle")
         titles.addWidget(title)
         titles.addWidget(subtitle)
         header.addLayout(titles, 1)
-        self.stop_button = QPushButton("停止")
+        self.stop_button = QPushButton("Stop")
         self.stop_button.setObjectName("stop")
         self.stop_button.clicked.connect(self.stop_task)
-        settings_button = QPushButton("设置")
+        settings_button = QPushButton("Settings")
         settings_button.setObjectName("secondary")
         settings_button.clicked.connect(self.open_settings)
         header.addWidget(settings_button)
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         splitter.setSizes([720, 420])
         layout.addWidget(splitter, 1)
         self.statusBar().showMessage(self._status_text())
-        resume_action = QAction("继续未完成任务", self)
+        resume_action = QAction("Resume unfinished task", self)
         resume_action.triggered.connect(self.resume_selected)
         self.menuBar().addAction(resume_action)
 
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
     def resume_selected(self) -> None:
         item = self.tasks.history.currentItem()
         if item is None:
-            QMessageBox.information(self, "没有选择任务", "先在历史里选一条任务。")
+            QMessageBox.information(self, "No task selected", "Select a task in History first.")
             return
         task_id = str(item.data(256))
         self.cancel_event.clear()
@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
         self.cancel_event.set()
         if self.worker is not None:
             self.worker.submit(False)
-        self.statusBar().showMessage("正在停止")
+        self.statusBar().showMessage("Stopping")
 
     def open_settings(self) -> None:
         dialog = SettingsPanel(self.settings, self)
@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
         self._refresh_status()
 
     def _failed(self, message: str) -> None:
-        self.chat.append_agent(f"任务没有完成：{message}")
+        self.chat.append_agent(f"The task did not finish: {message}")
         self.chat.set_busy(False)
         self._refresh_status()
 
@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
 
     def _status_text(self) -> str:
         if self.settings.provider == "cloud":
-            provider = "云端已开启" if self.settings.cloud_enabled else "云端未开启，只会使用本地规则"
+            provider = "Cloud is on" if self.settings.cloud_enabled else "Cloud is off. Only local rules are used."
         else:
             provider = f"Ollama · {self.settings.ollama_model}"
-        return f"{provider}    超时 {int(self.settings.task_timeout_seconds)} 秒    允许目录：下载、文档、桌面、图片"
+        return f"{provider}    Timeout {int(self.settings.task_timeout_seconds)} s    Allowed folders: Downloads, Documents, Desktop, Pictures"

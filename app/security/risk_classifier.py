@@ -96,25 +96,25 @@ def classify(tool: str, arguments: dict[str, Any], preflight: Preflight | None =
     if not known or tool.startswith("mcp."):
         risk = RiskLevel.high
         requires = True
-        reasons.append("未知或外部工具按高风险处理，并且只作用于这一次预览")
+        reasons.append("Unknown or external tools are high risk and apply only to this preview")
     if tool in ALWAYS_CONFIRM:
         requires = True
-        reasons.append("此操作需要你确认这一次的具体目标")
+        reasons.append("This action needs you to confirm this specific target once")
     if preflight and preflight.will_overwrite:
         risk = RiskLevel.high
         requires = True
-        reasons.append("目标已存在，确认后才会覆盖")
+        reasons.append("The target already exists and is overwritten only after confirmation")
     count = _target_count(arguments, preflight)
     if tool in BATCH_TOOLS and count > 1:
         requires = True
-        reasons.append(f"这一次会影响 {count} 个路径")
+        reasons.append(f"This action affects {count} paths")
     if tool == "apply_moves" and count >= 1:
         requires = True
-        reasons.append("将按预览中的路径移动文件")
+        reasons.append("Files will be moved along the paths in the preview")
     if tool in {"rename_file", "move_files", "copy_files"} and count > 3:
         requires = True
     if risk == RiskLevel.high:
         requires = True
     if requires and not reasons:
-        reasons.append("需要确认后才会执行")
+        reasons.append("This runs only after confirmation")
     return RiskDecision(risk=risk, requires_approval=requires, reasons=reasons)

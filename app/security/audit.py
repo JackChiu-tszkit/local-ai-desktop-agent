@@ -21,7 +21,7 @@ class AuditLog:
     ) -> None:
         safe_detail = detail
         if action == "type_text":
-            safe_detail = "已记录输入动作，正文不写入审计日志"
+            safe_detail = "Recorded a typing action. The text is not written to the audit log."
         self.database.add_audit(
             task_id=task_id,
             action=action,

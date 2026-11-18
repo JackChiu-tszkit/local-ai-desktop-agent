@@ -1,25 +1,25 @@
-# 架构
+# Architecture
 
-助手按“理解、计划、执行、观察、核对”循环工作。LangGraph 把一次任务限制在计划、单步执行、核对和收尾这几个节点里。步骤数、重试次数、单步超时和整次任务超时都有上限。相同工具和参数反复失败时会停止，而不是无限调用。
+The assistant works in a loop: understand, plan, act, observe, and verify. LangGraph keeps one task inside plan, single-step execution, verification, and finish. Step count, retries, step timeout, and task timeout all have limits. The same tool and arguments stop after repeated failure instead of calling forever.
 
-## 分层
+## Layers
 
-- `app/ui` 是 PySide6 桌面界面。任务在后台线程运行，确认对话框留在界面线程。
-- `app/agent` 负责计划和 LangGraph 循环。模型给出的风险等级不会被采纳，程序会重新分类。
-- `app/tools` 是类型化工具。没有 shell、永久删除或任意程序启动。
-- `app/security` 检查路径、划分风险，并记录一次性确认。
-- `app/platform` 调用 Windows API。测试用假的平台对象替换它。
-- `app/storage` 用 SQLite 保存任务、步骤检查点和审计。密钥走操作系统凭据库。
-- `app/mcp` 只启动用户配置里启用的服务器，调用前仍要确认。
+- `app/ui` is the PySide6 desktop window. Tasks run on a background thread. Confirmation dialogs stay on the interface thread.
+- `app/agent` plans and runs the LangGraph loop. A risk level suggested by the model is ignored and classified again by the program.
+- `app/tools` holds typed tools. There is no shell, permanent delete, or arbitrary program launch.
+- `app/security` checks paths, assigns risk, and records one-time confirmation.
+- `app/platform` calls the Windows API. Tests replace it with a fake platform object.
+- `app/storage` stores tasks, step checkpoints, and the audit log in SQLite. Secrets use the operating-system credential store.
+- `app/mcp` starts only servers enabled in the user's settings, and still asks before a call.
 
-## 工具优先级
+## Tool priority
 
-文件搜索、移动、壁纸和外观优先使用文件系统或文档化的系统接口。打开普通文件时交给系统关联程序。鼠标、键盘和截屏是补充能力：坐标会先对照虚拟屏幕，键盘输入前会核对前台窗口。
+File search, moves, wallpaper, and appearance prefer the filesystem or a documented system interface. Ordinary files open through the system file association. Mouse, keyboard, and screenshots are secondary: coordinates are checked against the virtual screen, and keyboard input checks the foreground window first.
 
-## 核对
+## Verification
 
-移动和重命名之后会检查源路径消失、目标存在且大小一致。回收站操作只检查源路径消失，失败时保留原文件。壁纸和外观会回读系统状态。打不开窗口时，步骤标成警告，不会假装已经看见结果。
+After a move or rename, the source path must be gone and the destination must exist with the same size. Recycle Bin operations only check that the source path is gone. On failure the original file stays. Wallpaper and appearance are read back from the system. If a window cannot be confirmed, the step is a warning and is not treated as visually verified.
 
-## 隐私
+## Privacy
 
-默认推理来源是本机 Ollama。云端提供方必须在设置里打开。即便打开了，截屏、文件内容和文件路径仍各自默认不发送。网页正文和文件正文不会进入下一轮计划；计划器只看路径数量、状态和短消息。
+The default model is local Ollama. A cloud provider must be turned on in Settings. Even then, screenshots, file contents, and file paths each stay off unless enabled separately. Web page text and file text do not enter the next plan. The planner sees path counts, status, and a short message.
