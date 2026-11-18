@@ -12,7 +12,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.agent.desktop import desktop_provider, next_desktop_action, youtube_search_url
+from app.agent.desktop import choose_youtube_result, desktop_provider, next_desktop_action, point_hits_ad, youtube_search_url
 from app.agent.executor import StepExecutor
 from app.agent.planner import Planner, public_observation
 from app.agent.recovery import decide
@@ -70,6 +70,7 @@ class DesktopAgent:
         self.provider = provider
         self.on_step: Callable[[dict], None] | None = None
         self.task_deadline = 0.0
+        self._presence_on = False
         self._graph = self._build_graph()
 
     def run(self, instruction: str) -> TaskReport:
@@ -154,7 +155,11 @@ class DesktopAgent:
         return self._invoke(state)
 
     def _invoke(self, state: dict) -> TaskReport:
-        final = self._graph.invoke(state, config={"recursion_limit": self.settings.max_steps * 6 + 20})
+        try:
+            final = self._graph.invoke(state, config={"recursion_limit": self.settings.max_steps * 6 + 20})
+        finally:
+            if self._presence_on:
+                self._set_presence(False)
         status = TaskStatus(final.get("status") or "failed")
         return TaskReport(
             task_id=final.get("task_id") or "",
@@ -191,6 +196,7 @@ class DesktopAgent:
             if not state.get("task_id"):
                 self.database.create_task(task_id, state["instruction"], self.settings.provider, plan.assumptions)
             self.task_deadline = max(self.task_deadline, time.monotonic() + max(self.settings.task_timeout_seconds, 300))
+            self._set_presence(True, "Agent is operating")
             return {
                 "route": "decide",
                 "task_id": task_id,
@@ -385,6 +391,7 @@ class DesktopAgent:
         if site and not plan.get("site_opened"):
             plan["site_opened"] = True
             plan["nav_url"] = site
+            self._aim_at_browser()
             return self._queue_desktop(state, plan, steps, "open_browser", {"url": site}, "Open a YouTube search in the browser")
         window = self.platform.find_window("YouTube") if site and plan.get("site_opened") else None
         if site and plan.get("site_opened") and window is None:
@@ -395,10 +402,23 @@ class DesktopAgent:
             return {"route": "decide", "plan": plan, "observations": observations}
         if window and not plan.get("site_title"):
             plan["site_title"] = window["title"]
+        if window and not plan.get("pointer_entered"):
+            plan["pointer_entered"] = True
+            width = int(window["right"] - window["left"])
+            height = int(window["bottom"] - window["top"])
+            self._glide_to(int(window["left"]) + int(width * 0.34), int(window["top"]) + int(height * 0.46))
         elif window and plan.get("page_clicks") and window["title"] != plan.get("site_title"):
             return {"route": "final", "status": "completed", "plan": plan, "clarification": f"Opened the video: {window['title']}"}
         if int(plan.get("page_clicks") or 0) >= 3:
             return {"route": "final", "status": "failed", "plan": plan, "error": "A video was clicked, but playback did not start"}
+        picked = self._youtube_result(window, plan) if site and window else None
+        if picked == "scroll":
+            return {"route": "decide", "plan": plan, "observations": observations}
+        if picked == "blocked":
+            return {"route": "final", "status": "failed", "plan": plan, "error": "The visible results were advertisements, so no video was opened"}
+        if isinstance(picked, dict):
+            self.platform.focus_window("YouTube")
+            return self._queue_desktop(state, plan, steps, "click", {"x": picked["x"], "y": picked["y"]}, "Click the first video that is not an advertisement")
         if observations:
             time.sleep(0.8)
         image_path, image_size, _pixels = self._capture_desktop(window)
@@ -417,7 +437,12 @@ class DesktopAgent:
             action = next_desktop_action(
                 provider,
                 settings=self.settings,
-                instruction="Click only the first video in the YouTube search results. Do not type." if site else instruction,
+                instruction=(
+                    "Skip advertisements labeled Sponsored, Ad, 赞助, or 贊助. "
+                    "Click the first ordinary video below them. Do not type."
+                )
+                if site
+                else instruction,
                 history=observations,
                 image_path=image_path,
                 windows=self.platform.window_titles(),
@@ -438,6 +463,11 @@ class DesktopAgent:
             return {"route": "final", "status": "completed", "plan": plan, "clarification": action["objective"]}
         if site and window and (action["tool"] == "type_text" or not _click_on_page(window, action)):
             action = _video_click(window, int(plan.get("page_clicks") or 0))
+        if site and window and action["tool"] == "click" and self._click_lands_on_ad(window, action):
+            scrolled = self._scroll_past_ad(window, plan)
+            if scrolled == "blocked":
+                return {"route": "final", "status": "failed", "plan": plan, "error": "The visible results were advertisements, so no video was opened"}
+            return {"route": "decide", "plan": plan, "observations": observations}
         if action["tool"] == "wait":
             time.sleep(min(3.0, max(0.2, float(action["arguments"].get("ms", 1000)) / 1000)))
             observations.append({"tool": "wait", "arguments": {}, "ok": True, "message": "Waited for the screen to settle", "error": None})
@@ -539,6 +569,88 @@ class DesktopAgent:
             max_hash_bytes=self.settings.max_hash_bytes,
             screenshot_dir=screenshot_dir,
         )
+
+    def _youtube_result(self, window: dict, plan: dict) -> dict | str | None:
+        controls = self._window_controls()
+        if not controls:
+            return None
+        choice = choose_youtube_result(controls, window, set(plan.get("used_videos") or []))
+        if choice is None:
+            return None
+        if choice["kind"] == "scroll":
+            return self._scroll_past_ad(window, plan)
+        plan.setdefault("used_videos", []).append(choice["name"])
+        return choice
+
+    def _click_lands_on_ad(self, window: dict, action: dict) -> bool:
+        arguments = action.get("arguments") or {}
+        if arguments.get("x") is None or arguments.get("y") is None:
+            return False
+        return point_hits_ad(self._window_controls(), window, int(arguments["x"]), int(arguments["y"]))
+
+    def _window_controls(self) -> list[dict]:
+        reader = getattr(self.platform, "list_window_controls", None)
+        if reader is None:
+            return []
+        try:
+            controls = reader("YouTube")
+        except Exception:
+            return []
+        return list(controls or [])
+
+    def _scroll_past_ad(self, window: dict, plan: dict) -> str:
+        if int(plan.get("ad_scrolls") or 0) >= 4:
+            return "blocked"
+        plan["ad_scrolls"] = int(plan.get("ad_scrolls") or 0) + 1
+        self.platform.focus_window("YouTube")
+        x = (int(window["left"]) + int(window["right"])) // 2
+        y = int(window["top"]) + int((int(window["bottom"]) - int(window["top"])) * 0.55)
+        self._glide_to(x, y)
+        move = getattr(self.platform, "move_mouse", None)
+        if move is not None:
+            try:
+                move(x, y)
+            except Exception:
+                pass
+        scroll = getattr(self.platform, "scroll", None)
+        if scroll is not None:
+            scroll(-8)
+        time.sleep(0.6)
+        return "scroll"
+
+    def _set_presence(self, active: bool, text: str = "Agent is operating") -> None:
+        self._presence_on = active
+        setter = getattr(self.platform, "set_agent_presence", None)
+        if setter is None:
+            return
+        try:
+            setter(active, text)
+        except Exception:
+            return
+
+    def _aim_at_browser(self) -> None:
+        window = None
+        finder = getattr(self.platform, "find_window", None)
+        if finder is not None:
+            for title in ("Chrome", "Edge", "Browser"):
+                window = finder(title)
+                if window:
+                    break
+        if window:
+            x = (int(window["left"]) + int(window["right"])) // 2
+            self._glide_to(x, int(window["top"]) + 48)
+            return
+        bounds = self.platform.virtual_screen()
+        self._glide_to(int(bounds["left"]) + int(bounds["width"]) // 2, int(bounds["top"]) + 140)
+
+    def _glide_to(self, x: int, y: int) -> None:
+        glider = getattr(self.platform, "glide_to", None)
+        if glider is None:
+            return
+        try:
+            glider(int(x), int(y))
+        except Exception:
+            return
 
     def _stopped(self) -> bool:
         return bool(self.cancel_event is not None and self.cancel_event.is_set())

@@ -383,6 +383,19 @@ def test_screen_coordinates_scale_from_the_resized_image():
     assert scaled["arguments"] == {"x": 200, "y": 100}
 
 
+def test_agent_pointer_badge_is_transparent_until_shown():
+    from app.platform.agent_presence import POINTER_HOTSPOT, banner_image, pointer_image, presence
+
+    badge = banner_image("Agent is operating")
+    pointer = pointer_image(True)
+    assert badge.mode == "RGBA"
+    assert badge.getpixel((0, 0))[3] == 0
+    assert badge.getpixel((140, 29))[3] > 200
+    assert pointer.size[0] > POINTER_HOTSPOT[0]
+    presence.glide(10, 10)
+    assert presence.active is False
+
+
 def test_desktop_control_requires_a_model(agent_bundle):
     agent, platform, _folders, _approval, _db = agent_bundle()
     report = agent.run("Open YouTube and play a song")
@@ -390,6 +403,68 @@ def test_desktop_control_requires_a_model(agent_bundle):
     assert "model" in report.report
     assert platform.opened == []
     assert platform.clicks == []
+
+
+def test_sponsored_result_is_not_treated_as_the_video():
+    from app.agent.desktop import choose_youtube_result, is_ad_label, point_hits_ad
+
+    window = {"left": 0, "top": 0, "right": 1280, "bottom": 720}
+    controls = [
+        {"name": "赞助", "control_type": "Text", "rect": (860, 300, 910, 326)},
+        {"name": "Create Music with Suno's AI. Your Sound, AI Powered.", "control_type": "Hyperlink", "rect": (180, 200, 1100, 500)},
+        {"name": "Piano music for a quiet evening", "control_type": "Hyperlink", "rect": (180, 580, 1100, 650)},
+        {"name": "No Mid-roll Ads piano collection", "control_type": "Hyperlink", "rect": (180, 660, 1100, 710)},
+    ]
+    assert is_ad_label("赞助")
+    assert is_ad_label("Sponsored")
+    assert is_ad_label("No Mid-roll Ads") is False
+    choice = choose_youtube_result(controls, window)
+    assert choice["kind"] == "click"
+    assert choice["name"] == "Piano music for a quiet evening"
+    assert point_hits_ad(controls, window, 300, 400)
+    assert point_hits_ad(controls, window, 640, 615) is False
+    only_ad = controls[:2]
+    assert choose_youtube_result(only_ad, window)["kind"] == "scroll"
+
+
+def test_youtube_skips_the_sponsored_card(agent_bundle):
+    class UnusedModel:
+        name = "fake"
+        supports_vision = True
+
+        def health(self):
+            return True, "ok"
+
+        def complete(self, messages, timeout, json_mode=False):
+            raise AssertionError("The advertisement should be skipped before asking the model")
+
+    agent, platform, _folders, approval, _db = agent_bundle(provider=UnusedModel())
+    platform.controls = [
+        {"name": "赞助", "control_type": "Text", "rect": (860, 300, 910, 326), "window": "YouTube - Google Chrome"},
+        {
+            "name": "Create Music with Suno's AI. Your Sound, AI Powered.",
+            "control_type": "Hyperlink",
+            "rect": (180, 200, 1100, 500),
+            "window": "YouTube - Google Chrome",
+        },
+        {
+            "name": "Piano music for a quiet evening",
+            "control_type": "Hyperlink",
+            "rect": (180, 580, 1100, 650),
+            "window": "YouTube - Google Chrome",
+        },
+    ]
+
+    def click(x, y, button="left", clicks=1):
+        platform.clicks.append((x, y, button, clicks))
+        platform.titles = ["Piano music for a quiet evening - YouTube - Google Chrome"]
+
+    platform.click = click
+    report = agent.run("Open YouTube and play a song")
+    assert report.status.value == "completed"
+    assert (640, 615, "left", 1) in platform.clicks
+    assert all(item[1] != 400 for item in platform.clicks if isinstance(item[0], int))
+    assert approval.previews == []
 
 
 def test_desktop_control_follows_what_the_model_chooses(agent_bundle):
@@ -416,6 +491,9 @@ def test_desktop_control_follows_what_the_model_chooses(agent_bundle):
     assert report.status.value == "completed"
     assert platform.opened[0].startswith("https://www.youtube.com/results?search_query=")
     assert (320, 280, "left", 1) in platform.clicks
+    assert any(item[0] == "glide" for item in platform.clicks)
+    assert platform.presence_log[0] == (True, "Agent is operating")
+    assert platform.presence_log[-1][0] is False
     assert approval.previews == []
     assert platform.typed == []
 

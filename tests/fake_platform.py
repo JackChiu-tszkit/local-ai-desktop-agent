@@ -14,6 +14,8 @@ class FakePlatform:
         self.launched: list[tuple[str, list[str]]] = []
         self.clicks: list[tuple] = []
         self.typed: list[tuple] = []
+        self.presence = False
+        self.presence_log: list[tuple[bool, str]] = []
         self.titles = ["Test window"]
         self.foreground = "Test window"
         self.appearance = "light"
@@ -78,6 +80,24 @@ class FakePlatform:
             "error_code": "window_not_ready",
         }
 
+    def list_window_controls(self, title_part: str) -> list[dict]:
+        rows: list[dict] = []
+        for control in self.controls:
+            if title_part.lower() not in str(control.get("window", "")).lower():
+                continue
+            left, top, right, bottom = control["rect"]
+            rows.append(
+                {
+                    "name": str(control.get("name", "")),
+                    "control_type": str(control.get("control_type", "")),
+                    "left": int(left),
+                    "top": int(top),
+                    "right": int(right),
+                    "bottom": int(bottom),
+                }
+            )
+        return rows
+
     def find_window(self, title_part: str) -> dict | None:
         for title in self.titles:
             if title_part.lower() in title.lower():
@@ -114,6 +134,13 @@ class FakePlatform:
 
     def virtual_screen(self) -> dict[str, int]:
         return {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+    def set_agent_presence(self, active: bool, text: str = "") -> None:
+        self.presence = active
+        self.presence_log.append((active, text))
+
+    def glide_to(self, x: int, y: int) -> None:
+        self.clicks.append(("glide", x, y))
 
     def click(self, x: int, y: int, button: str = "left", clicks: int = 1) -> None:
         self.clicks.append((x, y, button, clicks))

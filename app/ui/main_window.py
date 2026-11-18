@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.agent.desktop import is_desktop_request
 from app.config.settings import AppSettings
 from app.storage.database import Database
 from app.ui.approval_dialog import ApprovalDialog
@@ -92,6 +93,12 @@ class MainWindow(QMainWindow):
         self.chat.append_user(instruction)
         self.tasks.clear_steps()
         self.chat.set_busy(True)
+        if is_desktop_request(instruction):
+            self.chat.append_agent(
+                "The agent is operating the desktop. An orange pointer will move on screen, "
+                "and a banner will say the agent is operating. Press Stop to interrupt."
+            )
+            self.statusBar().showMessage("Agent is operating the desktop")
         self._start_worker(instruction, None)
 
     def resume_selected(self) -> None:

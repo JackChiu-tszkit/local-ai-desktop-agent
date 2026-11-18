@@ -241,6 +241,63 @@ class WindowsPlatform:
                 return True
         return False
 
+    def list_window_controls(self, title_part: str) -> list[dict]:
+        try:
+            from pywinauto import Desktop
+        except Exception:
+            return []
+        try:
+            windows = Desktop(backend="uia").windows()
+        except Exception:
+            return []
+        best = None
+        best_area = 0
+        for window in windows:
+            try:
+                title = window.window_text() or ""
+                rect = window.rectangle()
+            except Exception:
+                continue
+            if title_part.lower() not in title.lower():
+                continue
+            if rect.width() < 400 or rect.height() < 300:
+                continue
+            area = rect.width() * rect.height()
+            if area < best_area:
+                continue
+            best = window
+            best_area = area
+        if best is None:
+            return []
+        try:
+            controls = best.descendants()
+        except Exception:
+            return []
+        rows: list[dict] = []
+        for control in controls[:900]:
+            try:
+                info = control.element_info
+                name = info.name or ""
+                control_type = str(info.control_type or "")
+                if not name.strip():
+                    continue
+                if "password" in control_type.lower() or bool(getattr(info, "is_password", False)):
+                    continue
+                rect = control.rectangle()
+            except Exception:
+                continue
+            rows.append(
+                {
+                    "name": name[:160],
+                    "control_type": control_type,
+                    "left": int(rect.left),
+                    "top": int(rect.top),
+                    "right": int(rect.right),
+                    "bottom": int(rect.bottom),
+                }
+            )
+        return rows
+
     def find_window(self, title_part: str) -> dict | None:
         import win32gui
 
@@ -267,16 +324,39 @@ class WindowsPlatform:
 
         return virtual_screen()
 
+    def set_agent_presence(self, active: bool, text: str = "") -> None:
+        from app.platform.agent_presence import presence
+
+        if active:
+            presence.begin(text or "Agent is operating")
+        else:
+            presence.end()
+
+    def glide_to(self, x: int, y: int) -> None:
+        from app.platform.agent_presence import presence
+
+        presence.glide(x, y)
+
     def click(self, x: int, y: int, button: str = "left", clicks: int = 1) -> None:
         import pyautogui
 
+        from app.platform.agent_presence import presence
+
         pyautogui.FAILSAFE = True
+        if presence.active:
+            presence.glide(x, y)
+            presence.pulse()
         pyautogui.click(x=x, y=y, clicks=clicks, button=button)
 
     def move_mouse(self, x: int, y: int) -> None:
         import pyautogui
 
+        from app.platform.agent_presence import presence
+
         pyautogui.FAILSAFE = True
+        if presence.active:
+            presence.glide(x, y)
+            return
         pyautogui.moveTo(x, y)
 
     def scroll(self, amount: int) -> None:
@@ -317,7 +397,17 @@ class WindowsPlatform:
         import mss
         from PIL import Image
 
+        from app.platform.agent_presence import presence
+
         destination.parent.mkdir(parents=True, exist_ok=True)
+        presence.conceal_pointer()
+        try:
+            self._grab(target, monitor_index, destination, mss, Image)
+        finally:
+            presence.reveal_pointer()
+        return str(destination)
+
+    def _grab(self, target: str, monitor_index: int, destination: Path, mss, image_module) -> None:
         with mss.mss() as grabber:
             if target == "active_window":
                 rect = self._foreground_rect()
@@ -333,10 +423,9 @@ class WindowsPlatform:
             else:
                 monitor = grabber.monitors[0]
             raw = grabber.grab(monitor)
-            image = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+            image = image_module.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
             self._mask_passwords(image, monitor["left"], monitor["top"])
             image.save(destination)
-        return str(destination)
 
     def ui_tree(self) -> dict:
         try:
