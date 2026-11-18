@@ -1,0 +1,15 @@
+.venv/
+.cursor/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+*.db
+data/
+screenshots/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
