@@ -425,6 +425,15 @@ def test_sponsored_result_is_not_treated_as_the_video():
     assert point_hits_ad(controls, window, 640, 615) is False
     only_ad = controls[:2]
     assert choose_youtube_result(only_ad, window)["kind"] == "scroll"
+    channel_page = [
+        {"name": "訂閱「Suno」。", "control_type": "Button", "rect": (860, 250, 980, 300)},
+        {"name": "Suno Official Channel", "control_type": "Hyperlink", "rect": (180, 240, 700, 290)},
+        {"name": "4:05", "control_type": "Text", "rect": (180, 420, 240, 448)},
+        {"name": "Quiet piano for the evening", "control_type": "Hyperlink", "rect": (260, 390, 980, 470)},
+    ]
+    picked = choose_youtube_result(channel_page, window)
+    assert picked["name"] == "Quiet piano for the evening"
+    assert picked["y"] == 430
 
 
 def test_youtube_skips_the_sponsored_card(agent_bundle):
@@ -457,7 +466,16 @@ def test_youtube_skips_the_sponsored_card(agent_bundle):
 
     def click(x, y, button="left", clicks=1):
         platform.clicks.append((x, y, button, clicks))
-        platform.titles = ["Piano music for a quiet evening - YouTube - Google Chrome"]
+        platform.titles = ["Piano music for a quiet evening - YouTube - Audio playing - Google Chrome"]
+        platform.controls = [
+            {
+                "name": "Address and search bar",
+                "control_type": "Edit",
+                "value": "https://www.youtube.com/watch?v=piano",
+                "rect": (100, 40, 900, 70),
+                "window": "Piano music for a quiet evening - YouTube - Audio playing - Google Chrome",
+            }
+        ]
 
     platform.click = click
     report = agent.run("Open YouTube and play a song")
@@ -465,6 +483,74 @@ def test_youtube_skips_the_sponsored_card(agent_bundle):
     assert (640, 615, "left", 1) in platform.clicks
     assert all(item[1] != 400 for item in platform.clicks if isinstance(item[0], int))
     assert approval.previews == []
+
+
+def test_channel_page_is_left_until_audio_plays(agent_bundle):
+    from app.agent.desktop import youtube_view
+
+    assert youtube_view("Suno - YouTube", [{"value": "https://www.youtube.com/@Suno"}]) == "channel"
+    assert youtube_view("Piano - YouTube", [{"value": "https://www.youtube.com/watch?v=abc"}]) == "watch"
+    assert youtube_view("Piano - YouTube - Audio playing", [{"value": "https://www.youtube.com/watch?v=abc"}]) == "playing"
+    assert youtube_view(
+        "music - YouTube",
+        [
+            {"value": "https://www.youtube.com/results?search_query=music"},
+            {"name": "bilibili - Audio playing", "control_type": "TabItem"},
+            {"name": "已播放時間 0:09", "control_type": "Group"},
+        ],
+    ) == "results"
+
+    class UnusedModel:
+        name = "fake"
+        supports_vision = True
+
+        def health(self):
+            return True, "ok"
+
+        def complete(self, messages, timeout, json_mode=False):
+            raise AssertionError("A channel subscription must not be clicked")
+
+    agent, platform, _folders, _approval, _db = agent_bundle(provider=UnusedModel())
+    platform.controls = [
+        {"name": "訂閱「Suno」。", "control_type": "Button", "rect": (860, 250, 980, 300), "window": "YouTube - Google Chrome"},
+        {"name": "Suno Official Channel", "control_type": "Hyperlink", "rect": (180, 240, 700, 290), "window": "YouTube - Google Chrome"},
+        {"name": "4:05", "control_type": "Text", "rect": (180, 420, 240, 448), "window": "YouTube - Google Chrome"},
+        {"name": "Quiet piano for the evening", "control_type": "Hyperlink", "rect": (260, 390, 980, 470), "window": "YouTube - Google Chrome"},
+    ]
+
+    def click(x, y, button="left", clicks=1):
+        platform.clicks.append((x, y, button, clicks))
+        platform.titles = ["Suno - YouTube - Google Chrome"]
+        platform.controls = [
+            {
+                "name": "Address and search bar",
+                "control_type": "Edit",
+                "value": "https://www.youtube.com/@Suno",
+                "rect": (100, 40, 900, 70),
+                "window": "Suno - YouTube - Google Chrome",
+            }
+        ]
+
+    def hotkey(keys):
+        platform.typed.append(("hotkey", tuple(keys)))
+        platform.titles = ["Quiet piano for the evening - YouTube - Audio playing - Google Chrome"]
+        platform.controls = [
+            {
+                "name": "Address and search bar",
+                "control_type": "Edit",
+                "value": "https://www.youtube.com/watch?v=abc",
+                "rect": (100, 40, 900, 70),
+                "window": "Quiet piano for the evening - YouTube - Audio playing - Google Chrome",
+            }
+        ]
+
+    platform.click = click
+    platform.hotkey = hotkey
+    report = agent.run("Open YouTube and play a song")
+    assert report.status.value == "completed"
+    assert (620, 430, "left", 1) in platform.clicks
+    assert (920, 275, "left", 1) not in platform.clicks
+    assert ("hotkey", ("alt", "left")) in platform.typed
 
 
 def test_desktop_control_follows_what_the_model_chooses(agent_bundle):
@@ -487,6 +573,22 @@ def test_desktop_control_follows_what_the_model_chooses(agent_bundle):
             return '{"action":"done"}'
 
     agent, platform, _folders, approval, _db = agent_bundle(provider=SeeingModel())
+
+    def click(x, y, button="left", clicks=1):
+        platform.clicks.append((x, y, button, clicks))
+        if (x, y) == (320, 280):
+            platform.titles = ["Piano music for a quiet evening - YouTube - Audio playing - Google Chrome"]
+            platform.controls = [
+                {
+                    "name": "Address and search bar",
+                    "control_type": "Edit",
+                    "value": "https://www.youtube.com/watch?v=piano",
+                    "rect": (100, 40, 900, 70),
+                    "window": "Piano music for a quiet evening - YouTube - Audio playing - Google Chrome",
+                }
+            ]
+
+    platform.click = click
     report = agent.run("Open YouTube and play a song")
     assert report.status.value == "completed"
     assert platform.opened[0].startswith("https://www.youtube.com/results?search_query=")

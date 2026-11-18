@@ -12,7 +12,15 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.agent.desktop import choose_youtube_result, desktop_provider, next_desktop_action, point_hits_ad, youtube_search_url
+from app.agent.desktop import (
+    choose_youtube_result,
+    desktop_provider,
+    next_desktop_action,
+    point_hits_ad,
+    point_hits_subscribe,
+    youtube_search_url,
+    youtube_view,
+)
 from app.agent.executor import StepExecutor
 from app.agent.planner import Planner, public_observation
 from app.agent.recovery import decide
@@ -407,9 +415,27 @@ class DesktopAgent:
             width = int(window["right"] - window["left"])
             height = int(window["bottom"] - window["top"])
             self._glide_to(int(window["left"]) + int(width * 0.34), int(window["top"]) + int(height * 0.46))
-        elif window and plan.get("page_clicks") and window["title"] != plan.get("site_title"):
-            return {"route": "final", "status": "completed", "plan": plan, "clarification": f"Opened the video: {window['title']}"}
-        if int(plan.get("page_clicks") or 0) >= 3:
+        if site and window and plan.get("page_clicks"):
+            view = youtube_view(window["title"], self._window_controls())
+            if view == "playing":
+                return {"route": "final", "status": "completed", "plan": plan, "clarification": f"Playing: {window['title']}"}
+            if view == "channel":
+                backed = self._back_from_channel(plan)
+                if backed == "blocked":
+                    return {
+                        "route": "final",
+                        "status": "failed",
+                        "plan": plan,
+                        "error": "A channel page opened, and the music never started",
+                    }
+                return {"route": "decide", "plan": plan, "observations": observations}
+            if view == "watch":
+                plan["play_waits"] = int(plan.get("play_waits") or 0) + 1
+                if int(plan["play_waits"]) > 8:
+                    return {"route": "final", "status": "failed", "plan": plan, "error": "The video opened, but music did not start playing"}
+                time.sleep(1.0)
+                return {"route": "decide", "plan": plan, "observations": observations}
+        if int(plan.get("page_clicks") or 0) >= 6:
             return {"route": "final", "status": "failed", "plan": plan, "error": "A video was clicked, but playback did not start"}
         picked = self._youtube_result(window, plan) if site and window else None
         if picked == "scroll":
@@ -438,8 +464,8 @@ class DesktopAgent:
                 provider,
                 settings=self.settings,
                 instruction=(
-                    "Skip advertisements labeled Sponsored, Ad, 赞助, or 贊助. "
-                    "Click the first ordinary video below them. Do not type."
+                    "Skip advertisements and do not click Subscribe or a channel name. "
+                    "Click a music video. Do not type. Finish only when audio is playing."
                 )
                 if site
                 else instruction,
@@ -459,10 +485,36 @@ class DesktopAgent:
                 "clarification": f"The model did not provide a runnable next step: {exc}",
                 "plan": plan,
             }
-        if action["done"] and (not site or plan.get("page_clicks")):
+        if action["done"] and (not site or self._youtube_playing(window)):
             return {"route": "final", "status": "completed", "plan": plan, "clarification": action["objective"]}
+        if action["done"] and site:
+            plan["idle_waits"] = int(plan.get("idle_waits") or 0) + 1
+            if int(plan["idle_waits"]) > 4:
+                return {"route": "final", "status": "failed", "plan": plan, "error": "Music did not start playing"}
+            observations.append({"tool": "wait", "arguments": {}, "ok": True, "message": "Audio is not playing yet", "error": None})
+            return {"route": "decide", "plan": plan, "observations": observations}
         if site and window and (action["tool"] == "type_text" or not _click_on_page(window, action)):
             action = _video_click(window, int(plan.get("page_clicks") or 0))
+        if site and window and action["tool"] == "click" and self._click_lands_on_subscribe(action):
+            replacement = choose_youtube_result(self._window_controls(), window, set(plan.get("used_videos") or []))
+            if isinstance(replacement, dict) and replacement.get("kind") == "click":
+                action = {
+                    "done": False,
+                    "tool": "click",
+                    "arguments": {"x": replacement["x"], "y": replacement["y"]},
+                    "objective": "Click a music video instead of the channel",
+                }
+                plan.setdefault("used_videos", []).append(replacement["name"])
+            else:
+                scrolled = self._scroll_past_ad(window, plan)
+                if scrolled == "blocked":
+                    return {
+                        "route": "final",
+                        "status": "failed",
+                        "plan": plan,
+                        "error": "The click landed on a channel subscription, not a video",
+                    }
+                return {"route": "decide", "plan": plan, "observations": observations}
         if site and window and action["tool"] == "click" and self._click_lands_on_ad(window, action):
             scrolled = self._scroll_past_ad(window, plan)
             if scrolled == "blocked":
@@ -581,6 +633,31 @@ class DesktopAgent:
             return self._scroll_past_ad(window, plan)
         plan.setdefault("used_videos", []).append(choice["name"])
         return choice
+
+    def _youtube_playing(self, window: dict | None) -> bool:
+        if not window:
+            return False
+        return youtube_view(str(window.get("title") or ""), self._window_controls()) == "playing"
+
+    def _back_from_channel(self, plan: dict) -> str:
+        if int(plan.get("channel_backs") or 0) >= 4:
+            return "blocked"
+        plan["channel_backs"] = int(plan.get("channel_backs") or 0) + 1
+        self.platform.focus_window("YouTube")
+        hotkey = getattr(self.platform, "hotkey", None)
+        if hotkey is not None:
+            try:
+                hotkey(["alt", "left"])
+            except Exception:
+                pass
+        time.sleep(0.8)
+        return "back"
+
+    def _click_lands_on_subscribe(self, action: dict) -> bool:
+        arguments = action.get("arguments") or {}
+        if arguments.get("x") is None or arguments.get("y") is None:
+            return False
+        return point_hits_subscribe(self._window_controls(), int(arguments["x"]), int(arguments["y"]))
 
     def _click_lands_on_ad(self, window: dict, action: dict) -> bool:
         arguments = action.get("arguments") or {}

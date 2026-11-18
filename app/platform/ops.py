@@ -284,12 +284,18 @@ class WindowsPlatform:
                 if "password" in control_type.lower() or bool(getattr(info, "is_password", False)):
                     continue
                 rect = control.rectangle()
+                value = ""
+                try:
+                    value = str(control.get_value() or "")
+                except Exception:
+                    value = ""
             except Exception:
                 continue
             rows.append(
                 {
                     "name": name[:160],
                     "control_type": control_type,
+                    "value": value[:300],
                     "left": int(rect.left),
                     "top": int(rect.top),
                     "right": int(rect.right),

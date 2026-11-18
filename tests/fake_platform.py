@@ -90,6 +90,7 @@ class FakePlatform:
                 {
                     "name": str(control.get("name", "")),
                     "control_type": str(control.get("control_type", "")),
+                    "value": str(control.get("value") or ""),
                     "left": int(left),
                     "top": int(top),
                     "right": int(right),
